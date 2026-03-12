@@ -6,8 +6,11 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
     "declaration": true,
-    "esModuleInterop": true
+    "declarationMap": true,
+    "sourceMap": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]
