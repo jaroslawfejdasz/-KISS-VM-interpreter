@@ -448,7 +448,7 @@ export const R006_ChecksigNote: Rule = (tokens) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const ALL_RULES: Rule[] = [
   E011_NoReturn,
-  // E020_InvalidStatement,  // too many false positives at statement boundaries
+  E020_InvalidStatement,
   E021_FunctionAsStatement,
   E030_LetInvalid,
   E040_IfWithoutThen,

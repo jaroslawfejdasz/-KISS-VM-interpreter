@@ -481,7 +481,7 @@ exports.R006_ChecksigNote = R006_ChecksigNote;
 // ─────────────────────────────────────────────────────────────────────────────
 exports.ALL_RULES = [
     exports.E011_NoReturn,
-    // E020_InvalidStatement,  // too many false positives at statement boundaries
+    exports.E020_InvalidStatement,
     exports.E021_FunctionAsStatement,
     exports.E030_LetInvalid,
     exports.E040_IfWithoutThen,
