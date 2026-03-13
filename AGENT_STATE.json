@@ -2,17 +2,24 @@
   "phase": 6,
   "phase_name": "FINAL_READY",
   "step": "ready_for_github",
-  "iteration": 5,
+  "iteration": 6,
   "status": "complete",
-  "last_report": "2026-03-13T01:11",
+  "last_report": "2026-03-13T01:21",
   "phases_done": ["minima-test", "kiss-vm-lint", "minima-contracts", "create-minidapp", "monorepo+docs+ci", "final_audit"],
   "final_stats": {
     "packages": 4,
     "total_tests": 202,
-    "security_checks": 15,
+    "test_breakdown": {
+      "create-minidapp": 23,
+      "kiss-vm-lint": 40,
+      "minima-contracts": 59,
+      "minima-test": 80
+    },
     "typescript_errors": 0,
     "failures": 0,
-    "ci_workflows": 2
+    "ci_workflows": 2,
+    "contracts": 12,
+    "lint_rules": 15
   },
   "all_bugs_fixed": [
     "CRITICAL: MULTISIG always returned FALSE → n-of-k checking implemented",
@@ -20,8 +27,8 @@
     "MEDIUM: STATE() threw on missing var → returns 0x00 per Minima spec",
     "MEDIUM: PREVSTATE() threw on missing var → returns 0x00 per Minima spec",
     "LOW: 0x without hex digits gave silent token → now throws clear error",
-    "LOW: README badge showed 197 tests → updated to 202"
+    "LOW: Stale PascalCase .d.ts artifacts in minima-contracts/dist → cleaned"
   ],
   "location": "/app/monorepo",
-  "notes": "Final audit + security checks pass. 202 testy, 15 security checks, 0 TypeScript errors. Gotowe do GitHub."
+  "notes": "Full audit pass 2. 202 tests, 0 TS errors, 0 failures. Stale dist artifacts cleaned. Ready for GitHub."
 }
