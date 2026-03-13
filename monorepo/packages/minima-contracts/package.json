@@ -1,45 +1,29 @@
 {
   "name": "minima-contracts",
   "version": "0.1.0",
-  "description": "Ready-to-use KISS VM smart contract patterns for Minima blockchain",
-  "keywords": [
-    "blockchain",
-    "dapp",
-    "kiss-vm",
-    "minima",
-    "smart-contracts",
-    "utxo",
-    "web3"
-  ],
-  "author": "Minima Global",
-  "license": "MIT",
-  "main": "dist/index.js",
-  "bin": {},
   "files": [
     "dist",
     "README.md",
     "LICENSE"
   ],
+  "description": "Ready-to-use KISS VM smart contract patterns for Minima blockchain",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {},
   "scripts": {
     "build": "tsc",
     "test": "node tests/run.js",
     "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "minima",
+    "blockchain",
+    "kiss-vm",
+    "smart-contracts"
+  ],
+  "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.5.0",
     "typescript": "^5.9.3"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit",
-    "directory": "packages/minima-contracts"
-  },
-  "engines": {
-    "node": ">=16"
-  },
-  "types": "dist/index.d.ts",
-  "bugs": {
-    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit/issues"
-  },
-  "homepage": "https://github.com/YOUR_ORG/minima-developer-toolkit/tree/main/packages/minima-contracts#readme"
+  }
 }

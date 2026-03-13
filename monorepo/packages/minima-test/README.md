@@ -25,12 +25,12 @@ npx minima-test run tests/
 ## Installation
 
 ```bash
-npm install --save-dev @minima-global/minima-test
+npm install --save-dev minima-test
 ```
 
 Or run without installing:
 ```bash
-npx @minima-global/minima-test run tests/
+npx minima-test run tests/
 ```
 
 ## Quick Start
@@ -38,7 +38,7 @@ npx @minima-global/minima-test run tests/
 Create a test file `tests/my-contract.test.js`:
 
 ```js
-const { describe, it, expect, runScript } = require('@minima-global/minima-test');
+const { describe, it, expect, runScript } = require('minima-test');
 
 describe('My Contract', () => {
 

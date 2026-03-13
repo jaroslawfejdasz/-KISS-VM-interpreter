@@ -1,6 +1,11 @@
 {
   "name": "minima-contracts",
   "version": "0.1.0",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "description": "Ready-to-use KISS VM smart contract patterns for Minima blockchain",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

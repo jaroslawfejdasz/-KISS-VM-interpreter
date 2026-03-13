@@ -1,6 +1,11 @@
 {
-  "name": "@minima-global/minima-test",
+  "name": "minima-test",
   "version": "0.1.0",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "description": "Testing framework for Minima KISS VM smart contracts and MiniDapps",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

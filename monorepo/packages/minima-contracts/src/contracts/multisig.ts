@@ -84,10 +84,7 @@ export const multisigMofN: ContractTemplate = {
     },
   ],
   script({ required, keys }) {
-    // Accept both array and space-separated string for convenience
-    const keyList = Array.isArray(keys)
-      ? keys.join(', ')
-      : keys.trim().split(/\s+/).join(', ');
+    const keyList = keys.trim().split(/\s+/).join(', ');
     return `RETURN MULTISIG(${required}, ${keyList})`;
   },
   example: {

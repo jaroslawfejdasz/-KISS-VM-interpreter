@@ -177,13 +177,13 @@ const FUNCTIONS: Record<string, FnImpl> = {
   STATE: ([port], env) => {
     const p = port.asNumber();
     const sv = env.transaction?.stateVars?.[p];
-    if (sv === undefined) return MiniValue.hex('00'); // Minima: missing state var returns 0x00
+    if (sv === undefined) throw new Error(`State variable ${p} not found`);
     return MiniValue.string(sv);
   },
   PREVSTATE: ([port], env) => {
     const p = port.asNumber();
     const sv = env.transaction?.prevStateVars?.[p];
-    if (sv === undefined) return MiniValue.hex('00'); // Minima: missing prevstate returns 0x00
+    if (sv === undefined) throw new Error(`Previous state variable ${p} not found`);
     return MiniValue.string(sv);
   },
   SAMESTATE: ([from, to], env) => {

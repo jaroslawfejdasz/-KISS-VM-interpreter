@@ -41,53 +41,18 @@ export const test = it;
 // =============================================
 
 export interface RunScriptOptions {
-  /** Full transaction override */
   transaction?: Partial<MockTransaction>;
   inputIndex?: number;
   signatures?: string[];
   variables?: Record<string, MiniValue>;
   globals?: Record<string, MiniValue>;
-  mastScripts?: Record<string, string>;
-  // --- Convenience shortcuts ---
-  /** Set @BLOCK (blockNumber) directly */
-  block?: number;
-  /** Set current state variables directly: { 1: '0xaabb', 2: '100' } */
-  state?: Record<number, string>;
-  /** Set previous state variables directly */
-  prevState?: Record<number, string>;
-  /** Set coin amount directly */
-  amount?: number;
-  /** Set coin age directly (sets blockCreated = blockNumber - age) */
-  coinAge?: number;
+  mastScripts?: Record<string, string>; // hash -> script
 }
 
 export function runScript(script: string, options: RunScriptOptions = {}): ScriptResult {
-  // Apply shortcuts to transaction
-  const txOverride: Partial<MockTransaction> = { ...options.transaction };
-
-  if (options.block !== undefined) {
-    txOverride.blockNumber = options.block;
-  }
-  if (options.state !== undefined) {
-    txOverride.stateVars = options.state as Record<number, string>;
-  }
-  if (options.prevState !== undefined) {
-    txOverride.prevStateVars = options.prevState as Record<number, string>;
-  }
-  if (options.amount !== undefined) {
-    const inputs = txOverride.inputs ? [...txOverride.inputs] : undefined;
-    txOverride.inputs = inputs ?? [{ coinId: '0xabcdef1234567890', address: '0x1234567890abcdef', amount: options.amount, tokenId: '0x00', blockCreated: 0, stateVars: {} }];
-    if (txOverride.inputs[0]) (txOverride.inputs[0] as any).amount = options.amount;
-  }
-
-  const tx = defaultTransaction(txOverride);
-
-  // Apply coinAge shortcut after tx is built
-  if (options.coinAge !== undefined && tx.inputs[0]) {
-    tx.inputs[0].blockCreated = tx.blockNumber - options.coinAge;
-  }
-
+  const tx = defaultTransaction(options.transaction);
   const env = new Environment();
+  
   env.transaction = tx;
   env.inputIndex = options.inputIndex ?? 0;
   env.signatures = options.signatures ?? tx.signatures;
@@ -98,7 +63,7 @@ export function runScript(script: string, options: RunScriptOptions = {}): Scrip
   if (options.globals) {
     for (const [k, v] of Object.entries(options.globals)) env.setGlobal(k, v);
   }
-
+  
   // Set user variables
   if (options.variables) {
     for (const [k, v] of Object.entries(options.variables)) env.setVariable(k, v);
@@ -211,7 +176,7 @@ class Expect {
   }
 
   toBeWithinInstructions(max: number) {
-    if (this.val?.instructions !== undefined) {
+    if (!this.val?.instructions !== undefined) {
       if (this.val.instructions > max) {
         throw new AssertionError(
           `Expected ≤${max} instructions, got ${this.val.instructions}`

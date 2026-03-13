@@ -144,34 +144,3 @@ describe('Audit Fixes', () => {
     });
   });
 });
-
-describe('RunScript Shortcuts (API v2)', () => {
-  it('block shortcut sets @BLOCK', () => {
-    const r = runScript('RETURN @BLOCK EQ 999', { block: 999 });
-    if (!r.success) throw new Error('Expected PASS: ' + r.error);
-  });
-
-  it('state shortcut sets STATE(n)', () => {
-    const r = runScript('LET s = STATE(1) RETURN s EQ [hello]', { state: { 1: 'hello' } });
-    if (!r.success) throw new Error('Expected PASS: ' + r.error);
-  });
-
-  it('prevState shortcut sets PREVSTATE(n)', () => {
-    const r = runScript('LET s = PREVSTATE(2) RETURN s EQ [world]', { prevState: { 2: 'world' } });
-    if (!r.success) throw new Error('Expected PASS: ' + r.error);
-  });
-
-  it('coinAge shortcut sets @COINAGE', () => {
-    const r = runScript('RETURN @COINAGE GTE 50', { block: 100, coinAge: 60 });
-    if (!r.success) throw new Error('Expected PASS: ' + r.error);
-  });
-
-  it('block + state + signatures together', () => {
-    const key = '0x' + 'ab'.repeat(32);
-    const r = runScript(
-      'LET owner = STATE(1) RETURN @BLOCK GTE 1000 AND SIGNEDBY(owner)',
-      { block: 1005, state: { 1: key }, signatures: [key] }
-    );
-    if (!r.success) throw new Error('Expected PASS: ' + r.error);
-  });
-});

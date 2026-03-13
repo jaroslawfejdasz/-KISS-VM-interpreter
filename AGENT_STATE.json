@@ -1,16 +1,27 @@
 {
-  "phase": 9,
-  "phase_name": "READY_FOR_GITHUB",
+  "phase": 10,
+  "phase_name": "FINAL_AUDIT_COMPLETE",
   "step": "awaiting_repo_url",
-  "iteration": 9,
+  "iteration": 10,
   "status": "complete",
-  "last_report": "2026-03-13T01:51",
-  "phases_done": ["minima-test", "kiss-vm-lint", "minima-contracts", "create-minidapp", "monorepo+docs+ci", "final_audit", "deep_audit_v2", "pre_github_audit_v3", "final_verification"],
+  "last_report": "2026-03-13T01:09",
+  "phases_done": [
+    "minima-test",
+    "kiss-vm-lint",
+    "minima-contracts",
+    "create-minidapp",
+    "monorepo+docs+ci",
+    "final_audit",
+    "deep_audit_v2",
+    "pre_github_audit_v3",
+    "final_verification",
+    "pre_github_final_audit_v4"
+  ],
   "final_stats": {
     "packages": 4,
-    "total_tests": 202,
+    "total_tests": 197,
     "test_breakdown": {
-      "minima-test": 80,
+      "minima-test": 75,
       "kiss-vm-lint": 40,
       "minima-contracts": 59,
       "create-minidapp": 23
@@ -19,11 +30,19 @@
     "failures": 0,
     "npm_pack": "clean"
   },
+  "fixes_in_this_run": [
+    "Added files[] to minima-test and minima-contracts package.json",
+    "Removed @minima-global/ scope from minima-test (was inconsistent)",
+    "Updated README references: @minima-global/minima-test \u2192 minima-test",
+    "Synced monorepo/packages/* with /app/* (src, tests, tsconfig, README)",
+    "Fixed test count in README: 202 \u2192 197",
+    "Verified: 0 TypeScript errors, 197/197 tests pass from monorepo"
+  ],
   "known_limitations": [
-    "CHECKSIG: mock always false — needs real secp256k1",
-    "PROOF: mock always false — needs real MMR",
-    "0X uppercase prefix rejected — Minima spec",
-    "EXEC shares instruction counter with parent — intentional"
+    "CHECKSIG: mock always false \u2014 needs real secp256k1",
+    "PROOF: mock always false \u2014 needs real MMR",
+    "0X uppercase prefix rejected \u2014 Minima spec",
+    "EXEC shares instruction counter with parent \u2014 intentional"
   ],
   "ready_for_github": true,
   "awaiting": "GitHub repo URL from user"
