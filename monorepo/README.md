@@ -3,7 +3,7 @@
   <p><strong>The complete developer toolkit for building on the <a href="https://minima.global">Minima blockchain</a>.</strong></p>
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-  [![Tests](https://img.shields.io/badge/tests-197%20passing-brightgreen)](https://github.com/YOUR_ORG/minima-developer-toolkit/actions)
+  [![Tests](https://img.shields.io/badge/tests-202%20passing-brightgreen)](https://github.com/YOUR_ORG/minima-developer-toolkit/actions)
 </div>
 
 ---
@@ -95,7 +95,7 @@ Smart contracts use **KISS VM** — a simple but powerful scripting language. Ea
 ```
 minima-developer-toolkit/
 ├── packages/
-│   ├── minima-test/          # KISS VM test runner (80 tests)
+│   ├── minima-test/          # KISS VM test runner (75 tests)
 │   ├── kiss-vm-lint/         # Static analyzer (40 tests)
 │   ├── minima-contracts/     # Contract library (59 tests)
 │   └── create-minidapp/      # Scaffold CLI (23 tests)
@@ -105,7 +105,7 @@ minima-developer-toolkit/
 └── README.md
 ```
 
-**Total: 197 automated tests across all packages.**
+**Total: 202 automated tests across all packages.**
 
 ---
 
