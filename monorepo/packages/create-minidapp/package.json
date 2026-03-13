@@ -2,16 +2,6 @@
   "name": "create-minidapp",
   "version": "0.1.0",
   "description": "Scaffold CLI for Minima MiniDapp projects",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "create-minidapp": "./dist/cli.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "test": "node tests/run.js",
-    "prepublishOnly": "npm run build"
-  },
   "keywords": [
     "cli",
     "dapp",
@@ -21,7 +11,22 @@
     "utxo",
     "web3"
   ],
+  "author": "Minima Global",
   "license": "MIT",
+  "main": "dist/index.js",
+  "bin": {
+    "create-minidapp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node tests/run.js",
+    "prepublishOnly": "npm run build"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.9.3"
@@ -31,16 +36,12 @@
     "url": "https://github.com/YOUR_ORG/minima-developer-toolkit",
     "directory": "packages/create-minidapp"
   },
-  "bugs": {
-    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit/issues"
-  },
-  "homepage": "https://github.com/YOUR_ORG/minima-developer-toolkit/tree/main/packages/create-minidapp#readme",
   "engines": {
     "node": ">=16"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ]
+  "types": "dist/index.d.ts",
+  "bugs": {
+    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit/issues"
+  },
+  "homepage": "https://github.com/YOUR_ORG/minima-developer-toolkit/tree/main/packages/create-minidapp#readme"
 }

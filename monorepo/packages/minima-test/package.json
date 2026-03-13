@@ -2,16 +2,6 @@
   "name": "minima-test",
   "version": "0.1.0",
   "description": "Testing framework for Minima KISS VM smart contracts and MiniDapps",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "minima-test": "dist/cli/index.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "test": "node dist/cli/index.js run tests/",
-    "dev": "tsc --watch"
-  },
   "keywords": [
     "blockchain",
     "dapp",
@@ -22,7 +12,22 @@
     "utxo",
     "web3"
   ],
+  "author": "Minima Global",
   "license": "MIT",
+  "main": "dist/index.js",
+  "bin": {
+    "minima-test": "dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node dist/cli/index.js run tests/",
+    "dev": "tsc --watch"
+  },
   "devDependencies": {
     "@types/node": "^20.19.37",
     "typescript": "^5.9.3"
@@ -32,16 +37,12 @@
     "url": "https://github.com/YOUR_ORG/minima-developer-toolkit",
     "directory": "packages/minima-test"
   },
-  "bugs": {
-    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit/issues"
-  },
-  "homepage": "https://github.com/YOUR_ORG/minima-developer-toolkit/tree/main/packages/minima-test#readme",
   "engines": {
     "node": ">=16"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ]
+  "types": "dist/index.d.ts",
+  "bugs": {
+    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit/issues"
+  },
+  "homepage": "https://github.com/YOUR_ORG/minima-developer-toolkit/tree/main/packages/minima-test#readme"
 }

@@ -7,18 +7,25 @@
     "packages/*"
   ],
   "scripts": {
-    "build":   "npm run build --workspaces --if-present",
-    "test":    "npm run test  --workspaces --if-present",
-    "lint":    "npm run lint  --workspaces --if-present",
-    "clean":   "find packages -name dist -type d -exec rm -rf {} + 2>/dev/null; true"
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test  --workspaces --if-present",
+    "lint": "npm run lint  --workspaces --if-present",
+    "clean": "find packages -name dist -type d -exec rm -rf {} + 2>/dev/null; true"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/YOUR_ORG/minima-developer-toolkit"
   },
-  "keywords": ["minima", "blockchain", "kiss-vm", "minidapp", "developer-tools"],
+  "keywords": [
+    "minima",
+    "blockchain",
+    "kiss-vm",
+    "minidapp",
+    "developer-tools"
+  ],
   "license": "MIT",
   "engines": {
-    "node": ">=14"
-  }
+    "node": ">=16"
+  },
+  "author": "Minima Global"
 }

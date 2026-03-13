@@ -2,21 +2,6 @@
   "name": "kiss-vm-lint",
   "version": "0.1.0",
   "description": "Static analyzer and linter for Minima KISS VM smart contract scripts",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "kiss-vm-lint": "./dist/cli.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "test": "node tests/run.js",
-    "prepublishOnly": "npm run build && npm test"
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
   "keywords": [
     "blockchain",
     "dapp",
@@ -28,10 +13,21 @@
     "utxo",
     "web3"
   ],
-  "author": "",
+  "author": "Minima Global",
   "license": "MIT",
-  "engines": {
-    "node": ">=16"
+  "main": "dist/index.js",
+  "bin": {
+    "kiss-vm-lint": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node tests/run.js",
+    "prepublishOnly": "npm run build && npm test"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
@@ -41,6 +37,10 @@
     "url": "https://github.com/YOUR_ORG/minima-developer-toolkit",
     "directory": "packages/kiss-vm-lint"
   },
+  "engines": {
+    "node": ">=16"
+  },
+  "types": "dist/index.d.ts",
   "bugs": {
     "url": "https://github.com/YOUR_ORG/minima-developer-toolkit/issues"
   },
