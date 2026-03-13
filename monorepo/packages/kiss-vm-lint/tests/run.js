@@ -222,6 +222,29 @@ test('@AMOUNT is valid global', () => {
   expect(analyze('RETURN @AMOUNT GT 0')).toNotHaveCode('W060');
 });
 
+
+// ─── W071: Unknown function call ─────────────────────────────────────────────
+test('W071: warns on unknown function call', () => {
+  expect(analyze('RETURN FAKEFUNC(0xaabb)')).toHaveCode('W071');
+});
+test('W071: known function SHA3 no warning', () => {
+  const r = analyze('RETURN SHA3(0xaabb)');
+  if (r.all.some(e => e.code === 'W071')) throw new Error('SHA3 should not trigger W071');
+});
+test('W071: known function SIGNEDBY no warning', () => {
+  const r = analyze('RETURN SIGNEDBY(0xaabb)');
+  if (r.all.some(e => e.code === 'W071')) throw new Error('SIGNEDBY should not trigger W071');
+});
+
+// ─── W072: Variable redefined ─────────────────────────────────────────────────
+test('W072: warns on variable redefinition', () => {
+  expect(analyze('LET x = 1 LET x = 2 RETURN x EQ 2')).toHaveCode('W072');
+});
+test('W072: different variables no warning', () => {
+  const r = analyze('LET x = 1 LET y = 2 RETURN x EQ y');
+  if (r.all.some(e => e.code === 'W072')) throw new Error('Different vars should not warn');
+});
+
 // =====================================================================
 const total = passed + failed;
 console.log('\n\x1b[90m' + '─'.repeat(50) + '\x1b[0m');

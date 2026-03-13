@@ -446,6 +446,44 @@ export const R006_ChecksigNote: Rule = (tokens) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPORT ALL
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// W071: Variable-like token followed by '(' — unknown function call
+// ─────────────────────────────────────────────────────────────────────────────
+export const W071_UnknownFunctionCall: Rule = (tokens) => {
+  const warnings: LintError[] = [];
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const t = tokens[i];
+    const next = tokens[i + 1];
+    if (t.type === 'VARIABLE' && next.type === 'LPAREN') {
+      warnings.push(warn('W071', `'${t.value}(...)' looks like a function call but '${t.value}' is not a known KISS VM function`, t.pos));
+    }
+  }
+  return warnings;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// W072: Variable redefined (LET used twice for same name)
+// ─────────────────────────────────────────────────────────────────────────────
+export const W072_VariableRedefined: Rule = (tokens) => {
+  const warnings: LintError[] = [];
+  const defined = new Map<string, number>();
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type === 'KEYWORD' && t.value === 'LET') {
+      const next = tokens[i + 1];
+      if (next && next.type === 'VARIABLE') {
+        if (defined.has(next.value)) {
+          warnings.push(warn('W072', `Variable '${next.value}' is redefined — was already set with LET`, next.pos));
+        } else {
+          defined.set(next.value, next.pos ?? 0);
+        }
+      }
+    }
+  }
+  return warnings;
+};
+
 export const ALL_RULES: Rule[] = [
   E011_NoReturn,
   E020_InvalidStatement,
@@ -464,6 +502,9 @@ export const ALL_RULES: Rule[] = [
   W050_AssignmentInExpr,
   W060_UnknownGlobal,
   W070_UseBeforeLet,
+  W071_UnknownFunctionCall,
+  W072_VariableRedefined,
   R004_InstructionLimit,
   R006_ChecksigNote,
 ];
+
