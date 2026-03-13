@@ -1,10 +1,17 @@
 {
-  "phase": 4,
-  "phase_name": "create-minidapp",
-  "step": "start",
-  "iteration": 2,
-  "status": "running",
-  "last_report": "2026-03-12T22:36",
-  "phases_done": ["minima-test", "kiss-vm-lint", "minima-contracts"],
-  "notes": "minima-contracts: 56 testów, 12 kontraktów (basic-signed, time-lock, coin-age-lock, multisig 2of2/2of3/m-of-n, htlc, exchange, conditional-payment, state-channel, vault, dead-mans-switch). Wszystko zaudytowane i poprawione."
+  "phase": 5,
+  "phase_name": "DONE",
+  "step": "ready_for_github",
+  "iteration": 3,
+  "status": "complete",
+  "last_report": "2026-03-13T01:01",
+  "phases_done": ["minima-test", "kiss-vm-lint", "minima-contracts", "create-minidapp", "monorepo+docs+ci"],
+  "final_stats": {
+    "packages": 4,
+    "total_tests": 197,
+    "failures": 0,
+    "ci_workflows": 2
+  },
+  "location": "/app/monorepo",
+  "notes": "Monorepo gotowy. 197 testów, 0 failów. Audyt czysty. Gotowe do GitHub — czeka tylko na repo URL i git push."
 }

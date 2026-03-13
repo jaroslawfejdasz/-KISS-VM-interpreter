@@ -1,0 +1,70 @@
+name: PR Checks
+
+on:
+  pull_request:
+
+jobs:
+  changed-packages:
+    name: Detect changed packages
+    runs-on: ubuntu-latest
+    outputs:
+      minima-test: ${{ steps.changes.outputs.minima-test }}
+      kiss-vm-lint: ${{ steps.changes.outputs.kiss-vm-lint }}
+      minima-contracts: ${{ steps.changes.outputs.minima-contracts }}
+      create-minidapp: ${{ steps.changes.outputs.create-minidapp }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            minima-test:
+              - 'packages/minima-test/**'
+            kiss-vm-lint:
+              - 'packages/kiss-vm-lint/**'
+            minima-contracts:
+              - 'packages/minima-contracts/**'
+            create-minidapp:
+              - 'packages/create-minidapp/**'
+
+  test-minima-test:
+    needs: changed-packages
+    if: needs.changed-packages.outputs.minima-test == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20.x }
+      - run: cd packages/minima-test && npm install && npm run build && npm test
+
+  test-kiss-vm-lint:
+    needs: changed-packages
+    if: needs.changed-packages.outputs.kiss-vm-lint == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20.x }
+      - run: cd packages/kiss-vm-lint && npm install && npm run build && npm test
+
+  test-minima-contracts:
+    needs: changed-packages
+    if: needs.changed-packages.outputs.minima-contracts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20.x }
+      - run: |
+          cd packages/minima-test && npm install && npm run build
+          cd ../minima-contracts && npm install && npm run build && npm test
+
+  test-create-minidapp:
+    needs: changed-packages
+    if: needs.changed-packages.outputs.create-minidapp == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20.x }
+      - run: cd packages/create-minidapp && npm install && npm run build && npm test
