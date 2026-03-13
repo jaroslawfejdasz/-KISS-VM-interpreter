@@ -1,30 +1,5 @@
-# Dependencies
 node_modules/
-**/node_modules/
-
-# Build output
 dist/
-**/dist/
-*.tsbuildinfo
-
-# Environment
-.env
-.env.local
-*.env
-
-# OS
+*.js.map
 .DS_Store
-Thumbs.db
-
-# Editor
-.vscode/
-.idea/
-*.swp
-
-# Logs
-*.log
-npm-debug.log*
-
-# Test coverage
-coverage/
-*.lcov
+*.tsbuildinfo
