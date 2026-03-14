@@ -72,17 +72,17 @@ export function runScript(script: string, options: RunScriptOptions = {}): Scrip
   if (options.coinAge    !== undefined) env.setGlobal('@COINAGE', MiniValue.number(options.coinAge));
   if (options.coinAmount !== undefined) env.setGlobal('@AMOUNT', MiniValue.number(options.coinAmount));
 
-  // State variables (port -> value)
+  // State variables (port -> value) — stored in transaction
   if (options.state) {
+    if (!tx.stateVars) tx.stateVars = {};
     for (const [port, val] of Object.entries(options.state)) {
-      const v = typeof val === 'number' ? MiniValue.number(val) : MiniValue.hex(val);
-      env.setState(Number(port), v);
+      tx.stateVars[Number(port)] = String(val);
     }
   }
   if (options.prevState) {
+    if (!tx.prevStateVars) tx.prevStateVars = {};
     for (const [port, val] of Object.entries(options.prevState)) {
-      const v = typeof val === 'number' ? MiniValue.number(val) : MiniValue.hex(val);
-      env.setPrevState(Number(port), v);
+      tx.prevStateVars[Number(port)] = String(val);
     }
   }
 

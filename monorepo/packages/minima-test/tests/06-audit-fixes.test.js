@@ -144,3 +144,62 @@ describe('Audit Fixes', () => {
     });
   });
 });
+
+// STATE/PREVSTATE type coercion (BUG #5 fix)
+describe('STATE/PREVSTATE numeric comparison (BUG #5 fix)', () => {
+  it('STATE returns numeric value for numeric state', () => {
+    expect(runScript('RETURN STATE(1) EQ 42', {
+      state: { 1: 42 }
+    })).toPass();
+  });
+
+  it('PREVSTATE numeric comparison works correctly', () => {
+    // Was broken: "5" GT "10" was TRUE (string compare), now correctly FALSE
+    expect(runScript('RETURN STATE(1) GT PREVSTATE(1)', {
+      state: { 1: 5 },
+      transaction: { prevStateVars: { 1: '10' } }
+    })).toFail();
+  });
+
+  it('nonce increment correctly detected', () => {
+    expect(runScript('RETURN STATE(1) GT PREVSTATE(1)', {
+      state: { 1: 11 },
+      transaction: { prevStateVars: { 1: '10' } }
+    })).toPass();
+  });
+
+  it('STATE returns HEX value for 0x-prefixed state', () => {
+    expect(runScript('RETURN STATE(1) EQ 0xaabb', {
+      state: { 1: '0xaabb' }
+    })).toPass();
+  });
+
+  it('state channel nonce replay prevention', () => {
+    const script = [
+      'LET bothSigned = MULTISIG(2, 0xaaaa, 0xbbbb)',
+      'IF bothSigned THEN RETURN TRUE ENDIF',
+      'LET currentNonce = STATE(1)',
+      'LET prevNonce = PREVSTATE(1)',
+      'LET nonceOk = (currentNonce GT prevNonce)',
+      'LET timedOut = (@COINAGE GTE 1440)',
+      'LET signedByEither = (SIGNEDBY(0xaaaa) OR SIGNEDBY(0xbbbb))',
+      'RETURN nonceOk AND timedOut AND signedByEither'
+    ].join('\n');
+
+    // Old state (nonce 5 < prevNonce 10) → replay rejected
+    expect(runScript(script, {
+      state: { 1: 5 },
+      transaction: { prevStateVars: { 1: '10' } },
+      signatures: ['0xaaaa'],
+      coinAge: 2000
+    })).toFail();
+
+    // Fresh state (nonce 11 > prevNonce 10) → passes
+    expect(runScript(script, {
+      state: { 1: 11 },
+      transaction: { prevStateVars: { 1: '10' } },
+      signatures: ['0xaaaa'],
+      coinAge: 2000
+    })).toPass();
+  });
+});
