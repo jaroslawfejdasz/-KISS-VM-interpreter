@@ -28,10 +28,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/minima-global/developer-toolkit"
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter",
+    "directory": "packages/"
   },
   "bugs": {
-    "url": "https://github.com/minima-global/developer-toolkit/issues"
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter/issues"
   },
-  "homepage": "https://github.com/minima-global/developer-toolkit/tree/main/packages/minima-contracts#readme"
+  "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme"
 }

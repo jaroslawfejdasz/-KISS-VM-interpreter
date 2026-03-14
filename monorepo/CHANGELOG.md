@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-03-14
+
+### Security
+
+#### `minima-contracts` security audit
+- **SECURITY:** `state-channel` contract had a nonce replay vulnerability — `currentNonce GTE prevNonce` allowed submitting the same state twice. Fixed to `currentNonce GT prevNonce` (strict greater than).
+- Added test: `[runtime] same-nonce replay blocked` to cover this exact case.
+
+### Fixed
+- Repository URLs in all `package.json` files pointed to placeholder `minima-global/developer-toolkit` — updated to actual repo `jaroslawfejdasz/-KISS-VM-interpreter`
+- Test count badge updated to 198
+
 ## [0.1.1] - 2026-03-14
 
 ### Fixed

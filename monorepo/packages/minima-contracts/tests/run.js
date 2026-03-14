@@ -390,6 +390,13 @@ if (runScript) {
       ...withStateAndAge({ 1: '2' }, { 1: '5' }, 200)  // nonce 2 < prev 5
     }).success);
   });
+  test('[runtime] same-nonce replay blocked (nonce equal, not strictly greater)', () => {
+    const c = contracts.compile('state-channel', { pubKeyA: KEY_A, pubKeyB: KEY_B, timeoutBlocks: '100' });
+    assert(!runScript(c.script, {
+      signatures: [KEY_A],
+      ...withStateAndAge({ 1: '5' }, { 1: '5' }, 200)  // same nonce - must be rejected
+    }).success);
+  });
   test('[runtime] third party cannot close channel', () => {
     const c = contracts.compile('state-channel', { pubKeyA: KEY_A, pubKeyB: KEY_B, timeoutBlocks: '100' });
     assert(!runScript(c.script, {

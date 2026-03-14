@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/minima-global/developer-toolkit"
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter"
   },
   "keywords": [
     "minima",
@@ -27,9 +27,9 @@
   "engines": {
     "node": ">=16"
   },
-  "author": "Minima Global",
+  "author": "Jaroslaw Fejdasz",
   "bugs": {
-    "url": "https://github.com/minima-global/developer-toolkit/issues"
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter/issues"
   },
-  "homepage": "https://github.com/minima-global/developer-toolkit#readme"
+  "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme"
 }
