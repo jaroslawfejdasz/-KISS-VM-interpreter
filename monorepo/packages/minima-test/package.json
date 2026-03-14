@@ -13,7 +13,7 @@
     "minima-test": "dist/cli/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "test": "node dist/cli/index.js run tests/",
     "dev": "tsc --watch"
   },
@@ -27,10 +27,14 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.19.37",
-    "typescript": "^5.9.3"
+    "typescript": "5.4"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/minima-global/developer-toolkit"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/minima-global/developer-toolkit/issues"
+  },
+  "homepage": "https://github.com/minima-global/developer-toolkit/tree/main/packages/minima-test#readme"
 }

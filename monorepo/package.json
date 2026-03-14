@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit"
+    "url": "https://github.com/minima-global/developer-toolkit"
   },
   "keywords": [
     "minima",
@@ -27,5 +27,9 @@
   "engines": {
     "node": ">=16"
   },
-  "author": "Minima Global"
+  "author": "Minima Global",
+  "bugs": {
+    "url": "https://github.com/minima-global/developer-toolkit/issues"
+  },
+  "homepage": "https://github.com/minima-global/developer-toolkit#readme"
 }

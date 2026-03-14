@@ -8,7 +8,7 @@
     "kiss-vm-lint": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "test": "node tests/run.js",
     "prepublishOnly": "npm run build && npm test"
   },
@@ -31,10 +31,14 @@
     "node": ">=14"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "5.4"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit"
-  }
+    "url": "https://github.com/minima-global/developer-toolkit"
+  },
+  "bugs": {
+    "url": "https://github.com/minima-global/developer-toolkit/issues"
+  },
+  "homepage": "https://github.com/minima-global/developer-toolkit/tree/main/packages/kiss-vm-lint#readme"
 }
