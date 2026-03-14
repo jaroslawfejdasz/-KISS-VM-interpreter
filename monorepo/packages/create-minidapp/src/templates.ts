@@ -561,10 +561,24 @@ export const TEMPLATES: Record<string, Template> = {
   exchange: exchangeTemplate,
 };
 
-export function listTemplates(): void {
-  console.log('\nAvailable templates:\n');
-  for (const [key, tpl] of Object.entries(TEMPLATES)) {
-    console.log(`  ${key.padEnd(12)} ${tpl.description}`);
+export interface TemplateInfo {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export function listTemplates(print = true): TemplateInfo[] {
+  const list = Object.entries(TEMPLATES).map(([id, tpl]) => ({
+    id,
+    name: tpl.name,
+    description: tpl.description,
+  }));
+  if (print) {
+    console.log('\nAvailable templates:\n');
+    for (const t of list) {
+      console.log(`  ${t.id.padEnd(12)} ${t.description}`);
+    }
+    console.log('');
   }
-  console.log('');
+  return list;
 }

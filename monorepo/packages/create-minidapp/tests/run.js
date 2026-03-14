@@ -4,8 +4,7 @@
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
-const { scaffold } = require('../dist/index');
-const { TEMPLATES, listTemplates } = require('../dist/templates');
+const { scaffold, TEMPLATES, listTemplates } = require('../dist/index');
 
 let passed = 0;
 let failed = 0;

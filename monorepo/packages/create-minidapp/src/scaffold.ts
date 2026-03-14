@@ -5,10 +5,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ScaffoldOptions } from './types';
+import { ScaffoldOptions, ScaffoldResult } from './types';
 import { TEMPLATES } from './templates';
 
-export function scaffold(options: ScaffoldOptions): void {
+export function scaffold(options: ScaffoldOptions): ScaffoldResult {
   const { projectName, template, outputDir } = options;
 
   const tpl = TEMPLATES[template];
@@ -28,15 +28,15 @@ export function scaffold(options: ScaffoldOptions): void {
   fs.mkdirSync(projectDir, { recursive: true });
 
   const replacements: Record<string, string> = {
-    '{{NAME}}':       projectName,
-    '{{NAME_LOWER}}': projectName.toLowerCase().replace(/\s+/g, '-'),
+    '{{NAME}}':        projectName,
+    '{{NAME_LOWER}}':  projectName.toLowerCase().replace(/\s+/g, '-'),
     '{{DESCRIPTION}}': `A MiniDapp called ${projectName}`,
-    '{{RECV_AMOUNT}}': '100',
+    '{{RECV_AMOUNT}}':  '100',
     '{{RECV_ADDRESS}}': '0x00',
     '{{RECV_TOKEN}}':   '0x00',
   };
 
-  let filesWritten = 0;
+  const writtenFiles: string[] = [];
 
   for (const file of tpl.files) {
     const filePath = path.join(projectDir, file.path);
@@ -54,12 +54,12 @@ export function scaffold(options: ScaffoldOptions): void {
     }
 
     fs.writeFileSync(filePath, content, 'utf8');
-    filesWritten++;
+    writtenFiles.push(filePath);
   }
 
   console.log(`\n✅ Created MiniDapp project: ${projectDir}`);
   console.log(`   Template : ${template}`);
-  console.log(`   Files    : ${filesWritten}`);
+  console.log(`   Files    : ${writtenFiles.length}`);
   console.log(`\nNext steps:`);
   console.log(`  cd ${projectName}`);
   console.log(`  # Replace mds.js with the real file from your Minima node`);
@@ -67,4 +67,11 @@ export function scaffold(options: ScaffoldOptions): void {
   console.log(`  npm run package   # creates ${projectName.toLowerCase()}.mds.zip`);
   console.log(`  # Install the .mds.zip on your node`);
   console.log('');
+
+  return {
+    projectDir,
+    template,
+    filesWritten: writtenFiles.length,
+    files: writtenFiles,
+  };
 }

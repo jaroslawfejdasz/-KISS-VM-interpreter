@@ -19,6 +19,13 @@ export interface ScaffoldOptions {
   outputDir: string;
 }
 
+export interface ScaffoldResult {
+  projectDir: string;
+  template: string;
+  filesWritten: number;
+  files: string[];
+}
+
 export interface DappConf {
   name: string;
   icon: string;
