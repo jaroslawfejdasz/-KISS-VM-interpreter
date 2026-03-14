@@ -34,5 +34,6 @@
   "bugs": {
     "url": "https://github.com/minima-global/developer-toolkit/issues"
   },
-  "homepage": "https://github.com/minima-global/developer-toolkit/tree/main/packages/create-minidapp#readme"
+  "homepage": "https://github.com/minima-global/developer-toolkit/tree/main/packages/create-minidapp#readme",
+  "types": "dist/index.d.ts"
 }
