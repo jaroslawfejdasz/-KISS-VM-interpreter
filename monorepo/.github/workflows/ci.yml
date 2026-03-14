@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   test:
@@ -54,7 +54,7 @@ jobs:
     name: Publish to npm
     needs: [test, lint-check]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release:')
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && startsWith(github.event.head_commit.message, 'release:')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

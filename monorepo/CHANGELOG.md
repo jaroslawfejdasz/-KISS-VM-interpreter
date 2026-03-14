@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-03-14
+
+### Fixed
+
+#### `minima-test` bug fixes (audit pass)
+- **BUG #1:** Tokenizer was trimming whitespace inside string literals `[...]` — now preserves spaces exactly
+- **BUG #2:** `MULTISIG` always returned `FALSE` — implemented real n-of-k signature checking against `env.signatures`
+- **BUG #3:** Empty hex literal `0x` (without digits) silently produced a broken token — now throws a clear tokenizer error
+- Added `tests/06-audit-fixes.test.js` (23 new tests covering all fixes and edge cases)
+
+#### CI
+- Fixed GitHub Actions `ci.yml` to trigger on `master` branch (was `main` only)
+- `publish` job now triggers on both `main` and `master`
+
 ## [0.1.0] - 2026-03-14
 
 ### Added
@@ -22,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 6+ warning codes: unused variables, dead code, unknown globals, `=` vs `EQ`
 - Instruction count estimate
 - CLI: `kiss-vm-lint script.kiss` with `--json` output
-- 45 tests
+- 40 tests
 
 #### `minima-contracts` v0.1.0
 - 12 ready-to-use KISS VM contract templates:
