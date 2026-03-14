@@ -46,6 +46,7 @@ private:
     Token  readStringLiteral();
     Token  readIdentifierOrKeyword();
     bool   isKeyword(const std::string& upper) const;
+    Token  tokenFromOperatorWord(const std::string& upper, int line, int col);
 };
 
 } // namespace minima::kissvm
