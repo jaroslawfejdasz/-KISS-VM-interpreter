@@ -153,6 +153,7 @@ const FUNCTIONS: Record<string, FnImpl> = {
 
   // === SIGNATURES ===
   SIGNEDBY: ([pubkey], env) => {
+    if (!pubkey || pubkey.raw == null) throw new Error('SIGNEDBY: invalid public key argument');
     const pk = pubkey.raw.toLowerCase();
     return MiniValue.boolean(env.signatures.some(s => s.toLowerCase() === pk));
   },

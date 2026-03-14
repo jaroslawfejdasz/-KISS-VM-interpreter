@@ -1,11 +1,11 @@
 {
-  "phase": 27,
-  "phase_name": "FINAL_AUDIT_V3_COMPLETE_READY_FOR_GITHUB",
-  "iteration": 27,
+  "phase": 28,
+  "phase_name": "FINAL_AUDIT_V4_COMPLETE_READY_FOR_GITHUB",
+  "iteration": 28,
   "status": "awaiting_github_auth",
-  "last_verified": "2026-03-14T04:22",
-  "final_audit_v3": {
-    "date": "2026-03-14T04:22",
+  "last_verified": "2026-03-14T04:26",
+  "final_audit_v4": {
+    "date": "2026-03-14T04:26",
     "tests_total": 198,
     "test_failures": 0,
     "typescript_errors": 0,
@@ -17,7 +17,15 @@
     },
     "npm_pack": "OK",
     "github_actions_ci": "configured (Node 18/20/22)",
-    "docs": "README.md per package + root README + CHANGELOG + CONTRIBUTING"
+    "docs": "README.md per package + root README + CHANGELOG + CONTRIBUTING",
+    "bugs_found_and_fixed": [
+      "BUG #1: String trim in tokenizer — removed .trim()",
+      "BUG #2: MULTISIG always false — implemented n-of-k checking",
+      "BUG #3: Empty 0x token — added validation error",
+      "BUG #4: SIGNEDBY crash on undefined pubkey — added guard"
+    ],
+    "runtime_contract_audit": "14 contract scenarios tested manually (all pass)",
+    "cli_smoke_tests": "all 3 CLIs respond to --help, eval, generate"
   },
   "blocker": "GitHub connector: read:org+read:user only. Need 'repo' scope to push.",
   "user_action_needed": "Re-authorize GitHub connector with 'repo' scope → I push immediately",
