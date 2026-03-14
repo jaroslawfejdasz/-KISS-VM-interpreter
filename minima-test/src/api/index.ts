@@ -47,10 +47,70 @@ export interface RunScriptOptions {
   variables?: Record<string, MiniValue>;
   globals?: Record<string, MiniValue>;
   mastScripts?: Record<string, string>; // hash -> script
+  // Shorthand convenience overrides
+  block?: number;
+  coinAge?: number;
+  amount?: number;
+  tokenId?: string;
+  address?: string;
+  state?: Record<number, string>;
+  prevState?: Record<number, string>;
+  outputs?: Array<{ address: string; amount: number; tokenId: string; keepState?: boolean }>;
+  inputs?: Array<{ coinId?: string; address: string; amount: number; tokenId: string; blockCreated?: number; stateVars?: Record<number, string> }>;
 }
 
 export function runScript(script: string, options: RunScriptOptions = {}): ScriptResult {
-  const tx = defaultTransaction(options.transaction);
+  // Build transaction with shorthand overrides
+  const txOverrides: Partial<MockTransaction> = { ...options.transaction };
+
+  // block shorthand
+  if (options.block !== undefined) txOverrides.blockNumber = options.block;
+
+  // coinAge shorthand: set blockCreated so that blockNumber - blockCreated = coinAge
+  // Note: uses blockNumber from txOverrides (already set from options.block above) or default 1100
+  if (options.coinAge !== undefined) {
+    const bn = txOverrides.blockNumber ?? 1100;
+    const inputs = txOverrides.inputs ?? [{
+      coinId: '0xabcdef1234567890',
+      address: '0x1234567890abcdef',
+      amount: 100,
+      tokenId: '0x00',
+      blockCreated: bn - options.coinAge,
+      stateVars: {},
+    }];
+    txOverrides.inputs = inputs.map((inp, i) =>
+      i === 0 ? { ...inp, blockCreated: bn - options.coinAge! } : inp
+    );
+  }
+
+  // amount shorthand
+  if (options.amount !== undefined) {
+    const inputs = txOverrides.inputs ?? [{ coinId: '0xabcdef1234567890', address: '0x1234567890abcdef', amount: 100, tokenId: '0x00', blockCreated: 1000, stateVars: {} }];
+    txOverrides.inputs = inputs.map((inp, i) =>
+      i === 0 ? { ...inp, amount: options.amount! } : inp
+    );
+  }
+
+  // outputs shorthand
+  if (options.outputs !== undefined) txOverrides.outputs = options.outputs;
+
+  // inputs shorthand (full override)
+  if (options.inputs !== undefined) {
+    txOverrides.inputs = options.inputs.map(inp => ({
+      coinId: inp.coinId ?? '0xabcdef1234567890',
+      address: inp.address,
+      amount: inp.amount,
+      tokenId: inp.tokenId,
+      blockCreated: inp.blockCreated ?? 1000,
+      stateVars: inp.stateVars ?? {},
+    }));
+  }
+
+  // state / prevState shorthands
+  if (options.state !== undefined) txOverrides.stateVars = options.state;
+  if (options.prevState !== undefined) txOverrides.prevStateVars = options.prevState;
+
+  const tx = defaultTransaction(txOverrides);
   const env = new Environment();
   
   env.transaction = tx;

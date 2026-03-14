@@ -285,9 +285,9 @@ export const E082_WrongArgCount: Rule = (tokens) => {
 
     const [min, max] = arity;
     if (t.value === 'MULTISIG') {
-      // MULTISIG(n, key1, key2...) — min 3 args: n + at least 2 keys
-      if (argCount < 3) {
-        errors.push(err('E082', `MULTISIG requires at least 3 arguments: MULTISIG(n, key1, key2, ...) — got ${argCount}`, t.pos));
+      // MULTISIG(n, key1, ...) — min 2 args: n + at least 1 key
+      if (argCount < 2) {
+        errors.push(err('E082', `MULTISIG requires at least 2 arguments: MULTISIG(n, key1, ...) — got ${argCount}`, t.pos));
       }
       continue;
     }
@@ -465,6 +465,42 @@ export const W080_InfiniteLoop: Rule = (tokens) => {
 };
 
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// W091: MULTISIG impossible — n > number of provided keys
+// ─────────────────────────────────────────────────────────────────────────────
+export const W091_MultisigImpossible: Rule = (tokens) => {
+  const issues: LintError[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type !== 'KEYWORD' || t.value !== 'MULTISIG') continue;
+    if (tokens[i + 1]?.type !== 'LPAREN') continue;
+    // Count args
+    let j = i + 2;
+    let depth = 1;
+    let argCount = 1;
+    while (j < tokens.length && depth > 0) {
+      const tk = tokens[j];
+      if (tk.type === 'LPAREN') depth++;
+      else if (tk.type === 'RPAREN') { depth--; if (depth === 0) break; }
+      else if (tk.type === 'COMMA' && depth === 1) argCount++;
+      j++;
+    }
+    if (argCount < 3) continue; // already caught by E082
+    // First arg must be a number literal for static analysis
+    const firstArg = tokens[i + 2];
+    if (firstArg?.type !== 'NUMBER') continue;
+    const required = parseInt(firstArg.value, 10);
+    const keyCount = argCount - 1; // args minus the 'n' param
+    if (required > keyCount) {
+      issues.push(warn('W091',
+        `MULTISIG(${required}, ...) requires ${required} signatures but only ${keyCount} key(s) provided — can never pass`,
+        t.pos));
+    }
+  }
+  return issues;
+};
+
 export const ALL_RULES: Rule[] = [
   E011_NoReturn,
   E020_InvalidStatement,
@@ -486,4 +522,5 @@ export const ALL_RULES: Rule[] = [
   R004_InstructionLimit,
   R006_ChecksigNote,
   W080_InfiniteLoop,
+  W091_MultisigImpossible,
 ];

@@ -24,6 +24,27 @@ export interface RunScriptOptions {
     variables?: Record<string, MiniValue>;
     globals?: Record<string, MiniValue>;
     mastScripts?: Record<string, string>;
+    block?: number;
+    coinAge?: number;
+    amount?: number;
+    tokenId?: string;
+    address?: string;
+    state?: Record<number, string>;
+    prevState?: Record<number, string>;
+    outputs?: Array<{
+        address: string;
+        amount: number;
+        tokenId: string;
+        keepState?: boolean;
+    }>;
+    inputs?: Array<{
+        coinId?: string;
+        address: string;
+        amount: number;
+        tokenId: string;
+        blockCreated?: number;
+        stateVars?: Record<number, string>;
+    }>;
 }
 export declare function runScript(script: string, options?: RunScriptOptions): ScriptResult;
 export interface ScriptResult {

@@ -58,26 +58,26 @@ describe('Coin Age Lock (HODLer)', () => {
 });
 
 describe('Exchange Contract (atomic swap)', () => {
-  const wantToken  = '0xtoken123';
+  const wantToken  = '0xdead1234beef5678';
   const wantAmount = 100;
-  const myAddress  = '0xmyaddress';
+  const myAddress  = '0xabc123def456abc1';
   const script     = `RETURN VERIFYOUT(0, ${wantAmount}, ${myAddress}, ${wantToken})`;
 
   it('passes when correct token output exists', () => {
     expect(runScript(script, {
-      outputs: [{ amount: 100, address: '0xmyaddress', tokenId: '0xtoken123', keepState: false }]
+      outputs: [{ amount: 100, address: '0xabc123def456abc1', tokenId: '0xdead1234beef5678', keepState: false }]
     })).toPass();
   });
 
   it('fails when output has wrong amount', () => {
     expect(runScript(script, {
-      outputs: [{ amount: 99, address: '0xmyaddress', tokenId: '0xtoken123', keepState: false }]
+      outputs: [{ amount: 99, address: '0xabc123def456abc1', tokenId: '0xdead1234beef5678', keepState: false }]
     })).toFail();
   });
 
   it('fails when output goes to wrong address', () => {
     expect(runScript(script, {
-      outputs: [{ amount: 100, address: '0xwrongaddress', tokenId: '0xtoken123', keepState: false }]
+      outputs: [{ amount: 100, address: '0xdeaddeaddeaddead', tokenId: '0xdead1234beef5678', keepState: false }]
     })).toFail();
   });
 });

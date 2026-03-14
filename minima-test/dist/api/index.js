@@ -21,7 +21,50 @@ function it(name, fn) {
 }
 exports.test = it;
 function runScript(script, options = {}) {
-    const tx = (0, transaction_1.defaultTransaction)(options.transaction);
+    // Build transaction with shorthand overrides
+    const txOverrides = { ...options.transaction };
+    // block shorthand
+    if (options.block !== undefined)
+        txOverrides.blockNumber = options.block;
+    // coinAge shorthand: set blockCreated so that blockNumber - blockCreated = coinAge
+    // Note: uses blockNumber from txOverrides (already set from options.block above) or default 1100
+    if (options.coinAge !== undefined) {
+        const bn = txOverrides.blockNumber ?? 1100;
+        const inputs = txOverrides.inputs ?? [{
+                coinId: '0xabcdef1234567890',
+                address: '0x1234567890abcdef',
+                amount: 100,
+                tokenId: '0x00',
+                blockCreated: bn - options.coinAge,
+                stateVars: {},
+            }];
+        txOverrides.inputs = inputs.map((inp, i) => i === 0 ? { ...inp, blockCreated: bn - options.coinAge } : inp);
+    }
+    // amount shorthand
+    if (options.amount !== undefined) {
+        const inputs = txOverrides.inputs ?? [{ coinId: '0xabcdef1234567890', address: '0x1234567890abcdef', amount: 100, tokenId: '0x00', blockCreated: 1000, stateVars: {} }];
+        txOverrides.inputs = inputs.map((inp, i) => i === 0 ? { ...inp, amount: options.amount } : inp);
+    }
+    // outputs shorthand
+    if (options.outputs !== undefined)
+        txOverrides.outputs = options.outputs;
+    // inputs shorthand (full override)
+    if (options.inputs !== undefined) {
+        txOverrides.inputs = options.inputs.map(inp => ({
+            coinId: inp.coinId ?? '0xabcdef1234567890',
+            address: inp.address,
+            amount: inp.amount,
+            tokenId: inp.tokenId,
+            blockCreated: inp.blockCreated ?? 1000,
+            stateVars: inp.stateVars ?? {},
+        }));
+    }
+    // state / prevState shorthands
+    if (options.state !== undefined)
+        txOverrides.stateVars = options.state;
+    if (options.prevState !== undefined)
+        txOverrides.prevStateVars = options.prevState;
+    const tx = (0, transaction_1.defaultTransaction)(txOverrides);
     const env = new environment_1.Environment();
     env.transaction = tx;
     env.inputIndex = options.inputIndex ?? 0;
