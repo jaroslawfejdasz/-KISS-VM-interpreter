@@ -479,6 +479,22 @@ exports.R006_ChecksigNote = R006_ChecksigNote;
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPORT ALL
 // ─────────────────────────────────────────────────────────────────────────────
+
+// W051 — Potential infinite loop
+const W051_InfiniteLoop = (tokens) => {
+    const warnings = [];
+    for (let i = 0; i < tokens.length - 1; i++) {
+        const t = tokens[i];
+        if (t.type === 'KEYWORD' && t.value === 'WHILE') {
+            const next = tokens[i + 1];
+            if (next && next.type === 'BOOLEAN' && next.value === 'TRUE') {
+                warnings.push(warn('W051', 'WHILE TRUE — potential infinite loop. Ensure there is a RETURN inside the body.', t.pos));
+            }
+        }
+    }
+    return warnings;
+};
+exports.W051_InfiniteLoop = W051_InfiniteLoop;
 exports.ALL_RULES = [
     exports.E011_NoReturn,
     exports.E020_InvalidStatement,
@@ -499,5 +515,6 @@ exports.ALL_RULES = [
     exports.W070_UseBeforeLet,
     exports.R004_InstructionLimit,
     exports.R006_ChecksigNote,
+    W051_InfiniteLoop,
 ];
 //# sourceMappingURL=rules.js.map

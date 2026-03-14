@@ -222,6 +222,18 @@ test('@AMOUNT is valid global', () => {
   expect(analyze('RETURN @AMOUNT GT 0')).toNotHaveCode('W060');
 });
 
+
+// W051 - Infinite loop detection
+test('W051: WHILE TRUE warns about infinite loop', () => {
+  expect(analyze('WHILE TRUE DO LET x = 1 ENDWHILE RETURN TRUE')).toHaveCode('W051');
+});
+test('W051: WHILE with condition does not warn', () => {
+  expect(analyze('LET i = 0 WHILE i LT 10 DO LET i = INC(i) ENDWHILE RETURN TRUE')).toNotHaveCode('W051');
+});
+test('W051: WHILE FALSE does not warn', () => {
+  expect(analyze('WHILE FALSE DO ENDWHILE RETURN TRUE')).toNotHaveCode('W051');
+});
+
 // =====================================================================
 const total = passed + failed;
 console.log('\n\x1b[90m' + '─'.repeat(50) + '\x1b[0m');
