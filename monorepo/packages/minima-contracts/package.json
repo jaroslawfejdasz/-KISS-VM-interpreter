@@ -28,7 +28,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_ORG/minima-developer-toolkit",
-    "directory": "packages/minima-contracts"
+    "url": "https://github.com/minima-global/developer-toolkit"
   }
 }

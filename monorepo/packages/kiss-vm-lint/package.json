@@ -17,12 +17,21 @@
     "README.md",
     "LICENSE"
   ],
-  "keywords": ["minima", "kiss-vm", "blockchain", "linter", "smart-contracts", "static-analysis"],
+  "keywords": [
+    "minima",
+    "kiss-vm",
+    "blockchain",
+    "linter",
+    "smart-contracts",
+    "static-analysis"
+  ],
   "author": "",
   "license": "MIT",
-  "engines": { "node": ">=14" },
+  "engines": {
+    "node": ">=14"
+  },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",

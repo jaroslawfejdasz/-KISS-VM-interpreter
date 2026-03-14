@@ -88,12 +88,6 @@ async function main() {
 
   banner();
 
-  if (command === '--version' || command === '-v' || command === 'version') {
-    const pkg = require('../../package.json');
-    console.log(`  v${pkg.version}`);
-    process.exit(0);
-  }
-
   if (command === 'run' || !command) {
     const targetDir = args[1] || './tests';
     const files = await findTestFiles(path.resolve(targetDir));
@@ -124,26 +118,13 @@ async function main() {
   }
 
   if (command === 'eval') {
-    // Quick script evaluation: minima-test eval "RETURN TRUE" [--signed 0xkey1,0xkey2] [--block N]
+    // Quick script evaluation: minima-test eval "RETURN TRUE"
     const script = args[1];
-    if (!script) { console.log('Usage: minima-test eval "<script>" [--signed 0xkey1,0xkey2] [--block N]'); process.exit(1); }
-
+    if (!script) { console.log('Usage: minima-test eval "<script>"'); process.exit(1); }
+    
     const { runScript } = require('../api');
-
-    // Parse optional flags
-    const signedIdx = args.indexOf('--signed');
-    const blockIdx  = args.indexOf('--block');
-    const signatures = signedIdx !== -1 ? args[signedIdx + 1].split(',') : [];
-    const block      = blockIdx  !== -1 ? parseInt(args[blockIdx + 1], 10) : undefined;
-
-    const tx: any = {};
-    if (signatures.length) tx.signatures = signatures;
-    if (block !== undefined) tx.blockNumber = block;
-
-    const result = runScript(script, Object.keys(tx).length ? tx : undefined);
+    const result = runScript(script);
     console.log(c('bold', `  Script: `) + script);
-    if (signatures.length) console.log(c('dim', `  Signed by: ${signatures.join(', ')}`));
-    if (block !== undefined) console.log(c('dim', `  @BLOCK: ${block}`));
     console.log(c('bold', `  Result: `) + (result.success ? c('green', 'TRUE ✓') : c('red', 'FALSE ✗')));
     if (result.error) console.log(c('red', `  Error: `) + result.error);
     console.log(c('dim', `  Instructions: ${result.instructions}`));

@@ -259,37 +259,29 @@ export const E082_WrongArgCount: Rule = (tokens) => {
     const arity = FUNCTION_ARITY[t.value];
     if (!arity) continue;
 
-    // Count arguments — KISS VM uses space-separated args (no commas)
-    // Strategy: count top-level value tokens (skip nested parens as one arg)
+    // Count arguments
     let j = i + 2;
     let depth = 1;
     let argCount = 0;
+    let hasAnyArg = false;
 
     while (j < tokens.length && depth > 0) {
       const tk = tokens[j];
-      if (tk.type === 'LPAREN') {
-        depth++;
-        if (depth === 2) argCount++; // opening paren of a nested call = 1 arg
-        j++;
-        continue;
-      }
-      if (tk.type === 'RPAREN') {
+      if (tk.type === 'LPAREN') depth++;
+      else if (tk.type === 'RPAREN') {
         depth--;
-        j++;
-        continue;
+        if (depth === 0) { if (hasAnyArg) argCount++; break; }
       }
-      if (tk.type === 'COMMA') { j++; continue; } // ignore commas if present
-      if (tk.type === 'EOF') break;
-      // At depth 1: each distinct value token starts a new argument
-      // But consecutive value tokens (like 0xAA + 0xBB) are separate args
-      if (depth === 1) {
-        const valueTypes = new Set(['NUMBER','HEX','STRING','BOOLEAN','VARIABLE','GLOBAL','KEYWORD']);
-        if (valueTypes.has(tk.type)) {
-          argCount++;
-        }
+      else if (tk.type === 'COMMA' && depth === 1) {
+        argCount++;
+        hasAnyArg = true;
+      }
+      else if (tk.type !== 'EOF') {
+        hasAnyArg = true;
       }
       j++;
     }
+    if (hasAnyArg && argCount === 0) argCount = 1;
 
     const [min, max] = arity;
     if (t.value === 'MULTISIG') {
@@ -454,44 +446,6 @@ export const R006_ChecksigNote: Rule = (tokens) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPORT ALL
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// W071: Variable-like token followed by '(' — unknown function call
-// ─────────────────────────────────────────────────────────────────────────────
-export const W071_UnknownFunctionCall: Rule = (tokens) => {
-  const warnings: LintError[] = [];
-  for (let i = 0; i < tokens.length - 1; i++) {
-    const t = tokens[i];
-    const next = tokens[i + 1];
-    if (t.type === 'VARIABLE' && next.type === 'LPAREN') {
-      warnings.push(warn('W071', `'${t.value}(...)' looks like a function call but '${t.value}' is not a known KISS VM function`, t.pos));
-    }
-  }
-  return warnings;
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// W072: Variable redefined (LET used twice for same name)
-// ─────────────────────────────────────────────────────────────────────────────
-export const W072_VariableRedefined: Rule = (tokens) => {
-  const warnings: LintError[] = [];
-  const defined = new Map<string, number>();
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t.type === 'KEYWORD' && t.value === 'LET') {
-      const next = tokens[i + 1];
-      if (next && next.type === 'VARIABLE') {
-        if (defined.has(next.value)) {
-          warnings.push(warn('W072', `Variable '${next.value}' is redefined — was already set with LET`, next.pos));
-        } else {
-          defined.set(next.value, next.pos ?? 0);
-        }
-      }
-    }
-  }
-  return warnings;
-};
-
 export const ALL_RULES: Rule[] = [
   E011_NoReturn,
   E020_InvalidStatement,
@@ -510,9 +464,6 @@ export const ALL_RULES: Rule[] = [
   W050_AssignmentInExpr,
   W060_UnknownGlobal,
   W070_UseBeforeLet,
-  W071_UnknownFunctionCall,
-  W072_VariableRedefined,
   R004_InstructionLimit,
   R006_ChecksigNote,
 ];
-

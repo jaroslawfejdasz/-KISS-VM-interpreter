@@ -12,7 +12,7 @@ npm run build
 npm test
 ```
 
-All 202 tests should pass.
+All 197 tests should pass.
 
 ## Repository Structure
 

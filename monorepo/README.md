@@ -3,7 +3,7 @@
   <p><strong>The complete developer toolkit for building on the <a href="https://minima.global">Minima blockchain</a>.</strong></p>
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-  [![Tests](https://img.shields.io/badge/tests-202%20passing-brightgreen)](https://github.com/YOUR_ORG/minima-developer-toolkit/actions)
+  [![Tests](https://img.shields.io/badge/tests-197%20passing-brightgreen)](https://github.com/YOUR_ORG/minima-developer-toolkit/actions)
 </div>
 
 ---
@@ -105,7 +105,7 @@ minima-developer-toolkit/
 └── README.md
 ```
 
-**Total: 202 automated tests across all packages.**
+**Total: 197 automated tests across all packages.**
 
 ---
 
