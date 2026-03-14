@@ -1,74 +1,159 @@
 #pragma once
 /**
- * MiniNumber — Minima's arbitrary-precision fixed-point number type.
+ * MiniNumber — Java-compatible BigDecimal.
  *
- * Minima uses a decimal-based representation with up to 44 significant digits.
- * This type is the foundation of all value arithmetic in the protocol.
+ * Wire format (Java writeDataStream):
+ *   [int8  scale]       — BigDecimal.scale()
+ *   [uint8 len]         — byte length of unscaled BigInteger
+ *   [len bytes]         — BigInteger.toByteArray() (big-endian two's-complement)
  *
- * Design (C++ port):
- *  - Backed by std::string internally (matches Java BigDecimal behaviour)
- *  - Immutable by default — all operators return new instances
- *  - No external dependencies (no GMP, no Boost)
+ * Arithmetic: 64 significant digits, RoundingMode.DOWN (truncation toward zero)
+ * Range: [-(2^64-1), +(2^64-1)]
  */
-
 #include <string>
-#include <stdexcept>
-#include <cstdint>
 #include <vector>
+#include <cstdint>
+#include <stdexcept>
+#include <algorithm>
 
 namespace minima {
 
-class MiniNumber {
+// ===========================================================================
+// BigInt — two's-complement big-endian (mirrors Java BigInteger.toByteArray())
+// ===========================================================================
+class BigInt {
 public:
-    MiniNumber();
-    explicit MiniNumber(const std::string& s);
-    explicit MiniNumber(long long v);
+    std::vector<uint8_t> bytes; // Java BigInteger.toByteArray() format
 
-    static MiniNumber zero();
-    static MiniNumber one();
-    static MiniNumber two();
-    static MiniNumber maxAmount();  // 1,000,000,000 Minima
+    BigInt();
+    explicit BigInt(int64_t v);
+    explicit BigInt(const std::string& decimal);  // decimal string, optional '-'
 
-    // Arithmetic
-    MiniNumber add(const MiniNumber& rhs) const;
-    MiniNumber sub(const MiniNumber& rhs) const;
-    MiniNumber mul(const MiniNumber& rhs) const;
-    MiniNumber div(const MiniNumber& rhs) const;
-    MiniNumber mod(const MiniNumber& rhs) const;
+    static BigInt fromJavaBytes(const std::vector<uint8_t>& b);
+    static BigInt fromJavaBytes(const uint8_t* b, int len);
+    static BigInt zero();
+    static BigInt one();
 
-    // Bitwise (integer mode only — used by KISS VM)
-    MiniNumber bitwiseAnd(const MiniNumber& rhs) const;
-    MiniNumber bitwiseOr (const MiniNumber& rhs) const;
-    MiniNumber bitwiseXor(const MiniNumber& rhs) const;
-    MiniNumber shiftLeft (int bits) const;
-    MiniNumber shiftRight(int bits) const;
-    MiniNumber bitwiseNot() const;
+    const std::vector<uint8_t>& toJavaBytes() const { return bytes; }
 
-    // Comparison
-    bool isEqual(const MiniNumber& rhs) const;
-    bool isLessThan(const MiniNumber& rhs) const;
-    bool isGreaterThan(const MiniNumber& rhs) const;
-    bool isLessOrEqual(const MiniNumber& rhs) const;
-    bool isGreaterOrEqual(const MiniNumber& rhs) const;
+    bool isNegative() const { return !bytes.empty() && (bytes[0] & 0x80) != 0; }
+    bool isZero() const;
 
-    // Queries
-    bool isZero()     const;
-    bool isPositive() const;
-    bool isNegative() const;
-    bool isInteger()  const;
+    int  compareTo(const BigInt& o) const;
+    bool operator==(const BigInt& o) const;
+    bool operator!=(const BigInt& o) const { return !(*this == o); }
+    bool operator< (const BigInt& o) const { return compareTo(o) <  0; }
+    bool operator<=(const BigInt& o) const { return compareTo(o) <= 0; }
+    bool operator> (const BigInt& o) const { return compareTo(o) >  0; }
+    bool operator>=(const BigInt& o) const { return compareTo(o) >= 0; }
 
-    // Conversions
-    std::string toString()  const;
-    long long   toLong()    const;
+    BigInt operator+(const BigInt& o) const;
+    BigInt operator-(const BigInt& o) const;
+    BigInt operator*(const BigInt& o) const;
+    BigInt operator/(const BigInt& o) const;
+    BigInt operator%(const BigInt& o) const;
+    BigInt operator-() const;
 
-    // Serialisation (Minima wire format)
-    std::vector<uint8_t> serialise() const;
-    static MiniNumber    deserialise(const uint8_t* data, size_t& offset);
+    std::string toDecimalString() const;
+    int compareAbsTo(const BigInt& o) const;
+    void normalise();
+
+    // Public divmod for use by MiniNumber
+    static void divmodMag_pub(const BigInt& a, const BigInt& b,
+                              std::vector<uint8_t>& q, std::vector<uint8_t>& r);
 
 private:
-    std::string m_value;
-    static std::string normalise(const std::string& s);
-    static int         compareDecimal(const std::string& a, const std::string& b);
+    static std::vector<uint8_t> addMag(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
+    static std::vector<uint8_t> subMag(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
+    static std::vector<uint8_t> mulMag(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
+    static void divmodMag(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b,
+                          std::vector<uint8_t>& q, std::vector<uint8_t>& r);
+    static int compareAbsMag(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
+    std::vector<uint8_t> magnitude() const;
+    void fromSignMag(bool negative, const std::vector<uint8_t>& mag);
+};
+
+// ===========================================================================
+// MiniNumber
+// ===========================================================================
+class MiniNumber {
+public:
+    static constexpr int MAX_DIGITS         = 64;
+    static constexpr int MAX_DECIMAL_PLACES = MAX_DIGITS - 20; // 44
+
+    static const MiniNumber ZERO;
+    static const MiniNumber ONE;
+    static const MiniNumber TWO;
+    static const MiniNumber THREE;
+    static const MiniNumber FOUR;
+    static const MiniNumber EIGHT;
+    static const MiniNumber TWELVE;
+    static const MiniNumber SIXTEEN;
+    static const MiniNumber TWENTY;
+    static const MiniNumber THIRTYTWO;
+    static const MiniNumber FIFTY;
+    static const MiniNumber SIXTYFOUR;
+    static const MiniNumber TWOFIVESIX;
+    static const MiniNumber FIVEONE12;
+    static const MiniNumber THOUSAND24;
+    static const MiniNumber TEN;
+    static const MiniNumber HUNDRED;
+    static const MiniNumber THOUSAND;
+    static const MiniNumber MILLION;
+    static const MiniNumber HUNDMILLION;
+    static const MiniNumber BILLION;
+    static const MiniNumber TRILLION;
+    static const MiniNumber MINUSONE;
+
+    MiniNumber();
+    explicit MiniNumber(int64_t v);
+    explicit MiniNumber(const std::string& s);
+    MiniNumber(BigInt unscaled, int scale);
+
+    MiniNumber add(const MiniNumber& o) const;
+    MiniNumber sub(const MiniNumber& o) const;
+    MiniNumber mult(const MiniNumber& o) const;
+    MiniNumber div(const MiniNumber& o) const;
+    MiniNumber modulo(const MiniNumber& o) const;
+    MiniNumber pow(int n) const;
+    MiniNumber sqrt() const;
+    MiniNumber floor() const;
+    MiniNumber ceil() const;
+    MiniNumber abs() const;
+    MiniNumber increment() const;
+    MiniNumber decrement() const;
+    MiniNumber setSignificantDigits(int n) const;
+
+    int  compareTo    (const MiniNumber& o) const;
+    bool isEqual      (const MiniNumber& o) const { return compareTo(o)==0; }
+    bool isLess       (const MiniNumber& o) const { return compareTo(o)<0; }
+    bool isLessEqual  (const MiniNumber& o) const { return compareTo(o)<=0; }
+    bool isMore       (const MiniNumber& o) const { return compareTo(o)>0; }
+    bool isMoreEqual  (const MiniNumber& o) const { return compareTo(o)>=0; }
+
+    int64_t     getAsLong()   const;
+    int         getAsInt()    const { return (int)getAsLong(); }
+    double      getAsDouble() const;
+    std::string toString()    const;
+
+    std::vector<uint8_t> serialise() const;
+    static MiniNumber deserialise(const uint8_t* data, size_t& offset);
+    static MiniNumber deserialise(const std::vector<uint8_t>& data, size_t& offset) {
+        return deserialise(data.data(), offset);
+    }
+
+    const BigInt& getUnscaled() const { return m_unscaled; }
+    int           getScale()    const { return m_scale; }
+
+private:
+    BigInt m_unscaled;
+    int    m_scale = 0;
+
+    void applyMathContext();
+    void checkLimits() const;
+    static void alignScales(const MiniNumber& a, const MiniNumber& b,
+                            BigInt& ua, BigInt& ub, int& scale);
+    static BigInt scaledUp(const BigInt& u, int steps);
 };
 
 } // namespace minima

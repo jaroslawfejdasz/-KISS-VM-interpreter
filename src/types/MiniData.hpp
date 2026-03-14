@@ -1,13 +1,6 @@
 #pragma once
-/**
- * MiniData — arbitrary-length byte array (HEX type in KISS VM).
- *
- * Used for: public keys, signatures, hashes, script bytecode, custom data.
- * Always serialised as length-prefixed byte array on wire.
- */
-
-#include <string>
 #include <vector>
+#include <string>
 #include <cstdint>
 #include <stdexcept>
 
@@ -15,45 +8,60 @@ namespace minima {
 
 class MiniData {
 public:
+    static constexpr int MINIMA_MAX_HASH_LENGTH     = 64;
+    static constexpr int MINIMA_MAX_MINIDATA_LENGTH  = 512 * 1024 * 1024;
+
+    static const MiniData ZERO_TXPOWID;
+    static const MiniData ONE_TXPOWID;
+
     MiniData() = default;
-    explicit MiniData(const std::vector<uint8_t>& bytes);
-    explicit MiniData(const std::string& hexStr);  // "0xABCD..." or "ABCD..."
+    explicit MiniData(const std::vector<uint8_t>& b) : m_bytes(b) {}
+    explicit MiniData(std::vector<uint8_t>&& b) : m_bytes(std::move(b)) {}
 
-    // Factory
     static MiniData fromHex(const std::string& hex);
-    static MiniData fromBytes(const uint8_t* data, size_t len);
-    static MiniData zeroes(size_t len);
+    static MiniData fromBytes(const uint8_t* data, size_t len) {
+        return MiniData(std::vector<uint8_t>(data, data + len));
+    }
+    static MiniData withMinLength(const std::vector<uint8_t>& data, int minLen);
 
-    // Access
+    // Java getRandomData(int len) — for PRNG initialisation
+    static MiniData getRandomData(int len);
+
     const std::vector<uint8_t>& bytes() const { return m_bytes; }
+    const uint8_t* data() const { return m_bytes.data(); }
     size_t size() const { return m_bytes.size(); }
-    bool   isEmpty() const { return m_bytes.empty(); }
+    int    getLength() const { return (int)m_bytes.size(); }
+    bool   empty() const { return m_bytes.empty(); }
 
-    // Operations (mirror KISS VM HEX functions)
-    MiniData   concat(const MiniData& other) const;
-    MiniData   subset(size_t start, size_t len) const;
-    MiniData   rev() const;
+    bool isEqual(const MiniData& o) const { return m_bytes == o.m_bytes; }
+    bool isLess(const MiniData& o) const;
+    bool isMore(const MiniData& o) const { return o.isLess(*this); }
 
-    // Hashing (returns 32-byte MiniData)
-    MiniData   sha2() const;
-    MiniData   sha3() const;
+    std::string to0xString() const;
+    std::string toHexString(bool prefix = true) const;
 
-    // Comparison
-    bool operator==(const MiniData& rhs) const { return m_bytes == rhs.m_bytes; }
-    bool operator!=(const MiniData& rhs) const { return !(*this == rhs); }
+    MiniData sha3() const;  // NIST SHA3-256
+    MiniData sha2() const;  // SHA-256
 
-    // Conversions
-    std::string toHexString(bool prefix0x = true) const;
-
-    // Serialisation
+    // Normal serialisation: [int32 BE length][bytes]
     std::vector<uint8_t> serialise() const;
-    static MiniData      deserialise(const uint8_t* data, size_t& offset);
+    static MiniData deserialise(const uint8_t* data, size_t& offset);
+    static MiniData deserialise(const uint8_t* data, size_t& offset, int expectedSize);
+    static MiniData deserialise(const std::vector<uint8_t>& data, size_t& offset) {
+        return deserialise(data.data(), offset);
+    }
+
+    // Hash serialisation: same but max 64 bytes enforced
+    std::vector<uint8_t> serialiseHash() const;
+    static MiniData deserialiseHash(const uint8_t* data, size_t& offset);
+    static MiniData deserialiseHash(const std::vector<uint8_t>& data, size_t& offset) {
+        return deserialiseHash(data.data(), offset);
+    }
 
 private:
     std::vector<uint8_t> m_bytes;
 };
 
-// Alias — 32-byte hash
 using MiniHash = MiniData;
 
 } // namespace minima
