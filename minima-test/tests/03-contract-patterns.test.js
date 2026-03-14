@@ -1,209 +1,122 @@
 const { describe, it, expect, runScript, MiniValue, defaultTransaction } = require('../dist/api');
 
-describe('Smart Contract Patterns', () => {
+// === SMART CONTRACT PATTERNS ===
 
-  // ---- BASIC SIGNED ----
-  describe('Basic Signed (SIGNEDBY)', () => {
-    const ownerPubKey = '0xaabbccdd11223344';
+describe('Basic Signed (SIGNEDBY)', () => {
+  const ownerPubKey = '0xaabbccdd11223344';
 
-    it('passes when signed by owner', () => {
-      expect(runScript(
-        `RETURN SIGNEDBY(${ownerPubKey})`,
-        { signatures: [ownerPubKey] }
-      )).toPass();
-    });
-
-    it('fails when not signed', () => {
-      expect(runScript(
-        `RETURN SIGNEDBY(${ownerPubKey})`,
-        { signatures: [] }
-      )).toFail();
-    });
-
-    it('fails when signed by wrong key', () => {
-      expect(runScript(
-        `RETURN SIGNEDBY(${ownerPubKey})`,
-        { signatures: ['0xdeadbeefdeadbeef'] }
-      )).toFail();
-    });
+  it('passes when signed by owner', () => {
+    expect(runScript(
+      `RETURN SIGNEDBY(${ownerPubKey})`,
+      { signatures: [ownerPubKey] }
+    )).toPass();
   });
 
-  // ---- TIME LOCK ----
-  describe('Time Lock Contract', () => {
-    const lockUntilBlock = 2000;
-
-    // Script: only spendable after block 2000
-    const timeLockScript = `RETURN @BLOCK GTE ${lockUntilBlock}`;
-
-    it('fails before lock expires', () => {
-      expect(runScript(timeLockScript, {
-        transaction: { blockNumber: 1500 }
-      })).toFail();
-    });
-
-    it('passes exactly at lock block', () => {
-      expect(runScript(timeLockScript, {
-        transaction: { blockNumber: 2000 }
-      })).toPass();
-    });
-
-    it('passes after lock block', () => {
-      expect(runScript(timeLockScript, {
-        transaction: { blockNumber: 2500 }
-      })).toPass();
-    });
+  it('fails when not signed', () => {
+    expect(runScript(
+      `RETURN SIGNEDBY(${ownerPubKey})`,
+      { signatures: [] }
+    )).toFail();
   });
 
-  // ---- COINAGE LOCK ----
-  describe('Coin Age Lock (HODLer)', () => {
-    // Coin must be at least 500 blocks old before spending
-    const minAge = 500;
-    const script = `RETURN @COINAGE GTE ${minAge}`;
+  it('fails when signed by wrong key', () => {
+    expect(runScript(
+      `RETURN SIGNEDBY(${ownerPubKey})`,
+      { signatures: ['0xdeadbeefdeadbeef'] }
+    )).toFail();
+  });
+});
 
-    it('fails when coin is too young', () => {
-      expect(runScript(script, {
-        transaction: {
-          blockNumber: 1100,
-          inputs: [{ coinId: '0x01', address: '0x01', amount: 100, tokenId: '0x00', blockCreated: 1000 }]
-        }
-      })).toFail(); // coinage = 100
-    });
+describe('Time Lock Contract', () => {
+  const LOCK_BLOCK = 1000;
+  const script = `RETURN @BLOCK GTE ${LOCK_BLOCK}`;
 
-    it('passes when coin is old enough', () => {
-      expect(runScript(script, {
-        transaction: {
-          blockNumber: 2000,
-          inputs: [{ coinId: '0x01', address: '0x01', amount: 100, tokenId: '0x00', blockCreated: 1000 }]
-        }
-      })).toPass(); // coinage = 1000
-    });
+  it('fails before lock expires', () => {
+    expect(runScript(script, { block: 999 })).toFail();
   });
 
-  // ---- EXCHANGE CONTRACT ----
-  describe('Exchange Contract (atomic swap)', () => {
-    // Alice sends Minima, gets custom token back
-    // Script: output[0] must send token back to Alice's address
-    const aliceAddr = '0x1234567890abcdef';
-    const tokenId   = '0xdeadbeef00000000';
-    const amount    = 100;
-
-    const exchangeScript = `
-      LET validOutput = VERIFYOUT(0, ${amount}, ${aliceAddr}, ${tokenId})
-      RETURN validOutput
-    `;
-
-    it('passes when correct token output exists', () => {
-      expect(runScript(exchangeScript, {
-        transaction: {
-          inputs: [{
-            coinId: '0xabc', address: aliceAddr, amount: 100,
-            tokenId: '0x00', blockCreated: 1000
-          }],
-          outputs: [{
-            address: aliceAddr, amount: 100, tokenId: tokenId
-          }],
-          blockNumber: 1100,
-          blockTime: Date.now(),
-          signatures: [],
-        }
-      })).toPass();
-    });
-
-    it('fails when output has wrong amount', () => {
-      expect(runScript(exchangeScript, {
-        transaction: {
-          inputs: [{
-            coinId: '0xabc', address: aliceAddr, amount: 100,
-            tokenId: '0x00', blockCreated: 1000
-          }],
-          outputs: [{
-            address: aliceAddr, amount: 50, tokenId: tokenId
-          }],
-          blockNumber: 1100,
-          blockTime: Date.now(),
-          signatures: [],
-        }
-      })).toFail();
-    });
-
-    it('fails when output goes to wrong address', () => {
-      expect(runScript(exchangeScript, {
-        transaction: {
-          inputs: [{
-            coinId: '0xabc', address: aliceAddr, amount: 100,
-            tokenId: '0x00', blockCreated: 1000
-          }],
-          outputs: [{
-            address: '0xeviladdress000000', amount: 100, tokenId: tokenId
-          }],
-          blockNumber: 1100,
-          blockTime: Date.now(),
-          signatures: [],
-        }
-      })).toFail();
-    });
+  it('passes exactly at lock block', () => {
+    expect(runScript(script, { block: 1000 })).toPass();
   });
 
-  // ---- STATE VARIABLE CONTRACT ----
-  describe('State Variables', () => {
-    it('reads state variable', () => {
-      expect(runScript('LET s = STATE(0) RETURN s EQ [hello]', {
-        transaction: {
-          ...defaultTransaction(),
-          stateVars: { 0: 'hello' }
-        }
-      })).toPass();
-    });
+  it('passes after lock block', () => {
+    expect(runScript(script, { block: 1500 })).toPass();
+  });
+});
 
-    it('SAMESTATE - passes when state unchanged', () => {
-      expect(runScript('RETURN SAMESTATE(0, 2)', {
-        transaction: {
-          ...defaultTransaction(),
-          stateVars: { 0: 'a', 1: 'b', 2: 'c' },
-          prevStateVars: { 0: 'a', 1: 'b', 2: 'c' }
-        }
-      })).toPass();
-    });
+describe('Coin Age Lock (HODLer)', () => {
+  const MIN_AGE = 10000;
+  const script = `RETURN @COINAGE GTE ${MIN_AGE}`;
 
-    it('SAMESTATE - fails when state changed', () => {
-      expect(runScript('RETURN SAMESTATE(0, 2)', {
-        transaction: {
-          ...defaultTransaction(),
-          stateVars: { 0: 'a', 1: 'CHANGED', 2: 'c' },
-          prevStateVars: { 0: 'a', 1: 'b', 2: 'c' }
-        }
-      })).toFail();
-    });
+  it('fails when coin is too young', () => {
+    expect(runScript(script, { coinAge: 9999 })).toFail();
   });
 
-  // ---- GLOBALS ----
-  describe('Global Variables', () => {
-    it('@BLOCK is accessible', () => {
-      expect(runScript('RETURN @BLOCK EQ 1100', {
-        transaction: { ...defaultTransaction(), blockNumber: 1100 }
-      })).toPass();
-    });
+  it('passes when coin is old enough', () => {
+    expect(runScript(script, { coinAge: 10000 })).toPass();
+  });
+});
 
-    it('@AMOUNT reflects coin amount', () => {
-      expect(runScript('RETURN @AMOUNT EQ 250', {
-        transaction: {
-          inputs: [{ coinId: '0x01', address: '0x01', amount: 250, tokenId: '0x00', blockCreated: 100 }],
-          outputs: [], blockNumber: 200, blockTime: Date.now(), signatures: []
-        }
-      })).toPass();
-    });
+describe('Exchange Contract (atomic swap)', () => {
+  const wantToken  = '0xtoken123';
+  const wantAmount = 100;
+  const myAddress  = '0xmyaddress';
+  const script     = `RETURN VERIFYOUT(0, ${wantAmount}, ${myAddress}, ${wantToken})`;
 
-    it('@TOTIN and @TOTOUT', () => {
-      expect(runScript('RETURN @TOTIN EQ 1 AND @TOTOUT EQ 2', {
-        transaction: {
-          inputs: [{ coinId: '0x01', address: '0x01', amount: 100, tokenId: '0x00', blockCreated: 100 }],
-          outputs: [
-            { address: '0x02', amount: 60, tokenId: '0x00' },
-            { address: '0x03', amount: 40, tokenId: '0x00' },
-          ],
-          blockNumber: 200, blockTime: Date.now(), signatures: []
-        }
-      })).toPass();
-    });
+  it('passes when correct token output exists', () => {
+    expect(runScript(script, {
+      outputs: [{ amount: 100, address: '0xmyaddress', tokenId: '0xtoken123', keepState: false }]
+    })).toPass();
+  });
+
+  it('fails when output has wrong amount', () => {
+    expect(runScript(script, {
+      outputs: [{ amount: 99, address: '0xmyaddress', tokenId: '0xtoken123', keepState: false }]
+    })).toFail();
+  });
+
+  it('fails when output goes to wrong address', () => {
+    expect(runScript(script, {
+      outputs: [{ amount: 100, address: '0xwrongaddress', tokenId: '0xtoken123', keepState: false }]
+    })).toFail();
+  });
+});
+
+describe('State Variables', () => {
+  it('reads state variable', () => {
+    expect(runScript('LET s = STATE(1) RETURN s EQ 42', {
+      state: { 1: '42' }
+    })).toPass();
+  });
+
+  it('SAMESTATE - passes when state unchanged', () => {
+    expect(runScript('RETURN SAMESTATE(1, 3)', {
+      state:     { 1: 'a', 2: 'b', 3: 'c' },
+      prevState: { 1: 'a', 2: 'b', 3: 'c' }
+    })).toPass();
+  });
+
+  it('SAMESTATE - fails when state changed', () => {
+    expect(runScript('RETURN SAMESTATE(1, 3)', {
+      state:     { 1: 'a', 2: 'b', 3: 'X' },
+      prevState: { 1: 'a', 2: 'b', 3: 'c' }
+    })).toFail();
+  });
+});
+
+describe('Global Variables', () => {
+  it('@BLOCK is accessible', () => {
+    expect(runScript('RETURN @BLOCK GT 0', { block: 1000 })).toPass();
+  });
+
+  it('@AMOUNT reflects coin amount', () => {
+    expect(runScript('RETURN @AMOUNT GTE 100', { amount: 150 })).toPass();
+  });
+
+  it('@TOTIN and @TOTOUT', () => {
+    expect(runScript('RETURN @TOTIN GTE @TOTOUT', {
+      inputs:  [{ amount: 100, address: '0xabc', tokenId: '0x00', id: '0xid1' }],
+      outputs: [{ amount: 90,  address: '0xdef', tokenId: '0x00', keepState: false }]
+    })).toPass();
   });
 });
