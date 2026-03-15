@@ -24,6 +24,7 @@ class DataStream {
 public:
     // ── Write ─────────────────────────────────────────────────────────────────
 
+    DataStream() = default;  // write mode
     void writeUInt8 (uint8_t  v);
     void writeUInt16(uint16_t v);   // big-endian
     void writeUInt32(uint32_t v);   // big-endian

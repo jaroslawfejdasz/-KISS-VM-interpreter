@@ -289,6 +289,17 @@ BigInt BigInt::operator-() const {
 MiniNumber::MiniNumber() : m_unscaled(0LL), m_scale(0) {}
 MiniNumber::MiniNumber(int64_t v) : m_unscaled(v), m_scale(0) { checkLimits(); }
 
+
+MiniNumber MiniNumber::fromBytes(const std::vector<uint8_t>& bigEndianBytes) {
+    // Java BigInteger(1, bytes) — positive number from big-endian magnitude
+    BigInt bi;
+    bi.bytes = bigEndianBytes;
+    // Ensure MSB is 0 (positive sign bit in Java BigInteger format)
+    if (!bi.bytes.empty() && (bi.bytes[0] & 0x80)) {
+        bi.bytes.insert(bi.bytes.begin(), 0x00);
+    }
+    return MiniNumber(std::move(bi), 0);
+}
 MiniNumber::MiniNumber(BigInt unscaled, int scale)
     : m_unscaled(std::move(unscaled)), m_scale(scale) {
     applyMathContext(); checkLimits();

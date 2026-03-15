@@ -109,6 +109,7 @@ public:
     explicit MiniNumber(int64_t v);
     explicit MiniNumber(const std::string& s);
     MiniNumber(BigInt unscaled, int scale);
+    static MiniNumber fromBytes(const std::vector<uint8_t>& bigEndianBytes);  // from raw big-endian bytes (e.g. SHA2 hash)
 
     MiniNumber add(const MiniNumber& o) const;
     MiniNumber sub(const MiniNumber& o) const;
