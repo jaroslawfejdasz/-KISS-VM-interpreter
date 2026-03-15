@@ -20,6 +20,7 @@ public:
     const std::string& str() const { return m_value; }
     size_t length() const { return m_value.size(); }
     bool   isEmpty() const { return m_value.empty(); }
+    bool   empty()   const { return m_value.empty(); }
 
     bool operator==(const MiniString& rhs) const { return m_value == rhs.m_value; }
     bool operator!=(const MiniString& rhs) const { return !(*this == rhs); }

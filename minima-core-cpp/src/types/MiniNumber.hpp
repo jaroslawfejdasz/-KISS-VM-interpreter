@@ -130,6 +130,15 @@ public:
     bool isLess       (const MiniNumber& o) const { return compareTo(o)<0; }
     bool isLessEqual  (const MiniNumber& o) const { return compareTo(o)<=0; }
     bool isMore       (const MiniNumber& o) const { return compareTo(o)>0; }
+    bool isZero       ()                   const { return m_unscaled.isZero(); }
+    bool isPositive   ()                   const { return !m_unscaled.isNegative() && !m_unscaled.isZero(); }
+    bool isNegative   ()                   const { return m_unscaled.isNegative(); }
+    static MiniNumber zero() { return MiniNumber(0LL); }
+    // Aliases for test compatibility
+    bool isLessThan     (const MiniNumber& o) const { return isLess(o); }
+    bool isGreaterThan  (const MiniNumber& o) const { return isMore(o); }
+    MiniNumber mul(const MiniNumber& o) const { return mult(o); }
+    MiniNumber mod(const MiniNumber& o) const { return modulo(o); }
     bool isMoreEqual  (const MiniNumber& o) const { return compareTo(o)>=0; }
 
     int64_t     getAsLong()   const;

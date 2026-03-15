@@ -47,8 +47,8 @@ bool Value::isTrue() const {
     switch (m_type) {
         case ValueType::BOOLEAN: return std::get<bool>(m_data);
         case ValueType::NUMBER:  return !std::get<MiniNumber>(m_data).isZero();
-        case ValueType::HEX:     return !std::get<MiniData>(m_data).isEmpty();
-        case ValueType::SCRIPT:  return !std::get<MiniString>(m_data).isEmpty();
+        case ValueType::HEX:     return !std::get<MiniData>(m_data).empty();
+        case ValueType::SCRIPT:  return !std::get<MiniString>(m_data).empty();
     }
     return false;
 }

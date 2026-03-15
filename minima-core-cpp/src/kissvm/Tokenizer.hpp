@@ -7,7 +7,7 @@
  *  - Case-insensitive keywords and function names
  *  - 0x-prefixed hex literals
  *  - Quoted string literals
- *  - Single-line comments (/* ... */)
+ *  - Single-line comments (C-style block comments)
  *  - Numeric literals (decimal, may be negative)
  */
 

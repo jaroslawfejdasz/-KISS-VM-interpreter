@@ -34,11 +34,25 @@ public:
     bool   empty() const { return m_bytes.empty(); }
 
     bool isEqual(const MiniData& o) const { return m_bytes == o.m_bytes; }
+    bool operator==(const MiniData& o) const { return m_bytes == o.m_bytes; }
+    bool operator!=(const MiniData& o) const { return m_bytes != o.m_bytes; }
     bool isLess(const MiniData& o) const;
     bool isMore(const MiniData& o) const { return o.isLess(*this); }
 
     std::string to0xString() const;
     std::string toHexString(bool prefix = true) const;
+
+    // Java CONCAT / SUBSET operations
+    MiniData concat(const MiniData& o) const {
+        std::vector<uint8_t> r = m_bytes;
+        r.insert(r.end(), o.m_bytes.begin(), o.m_bytes.end());
+        return MiniData(r);
+    }
+    MiniData subset(int start, int len) const {
+        if(start < 0 || len < 0 || start + len > (int)m_bytes.size())
+            throw std::runtime_error("MiniData::subset out of range");
+        return MiniData(std::vector<uint8_t>(m_bytes.begin()+start, m_bytes.begin()+start+len));
+    }
 
     MiniData sha3() const;  // NIST SHA3-256
     MiniData sha2() const;  // SHA-256
