@@ -30,6 +30,8 @@ add_library(minima-core STATIC
     src/kissvm/Tokenizer.cpp
     src/kissvm/Environment.cpp
     src/kissvm/Contract.cpp
+    src/kissvm/Parser.cpp
+    src/kissvm/Interpreter.cpp
     src/kissvm/functions/Functions.cpp
 
     src/crypto/Hash.cpp

@@ -17,6 +17,7 @@
 #include "../objects/TxPoW.hpp"
 #include "../objects/Coin.hpp"
 #include <string>
+#include <functional>
 #include <vector>
 
 namespace minima::validation {
