@@ -2,45 +2,66 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }}, ${{ matrix.compiler }})
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-22.04
-            compiler: gcc
-            cc: gcc-12
-            cxx: g++-12
-          - os: ubuntu-22.04
-            compiler: clang
-            cc: clang-14
-            cxx: clang++-14
-          - os: macos-13
-            compiler: clang
-            cc: clang
-            cxx: clang++
+        os: [ubuntu-22.04, ubuntu-24.04]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure CMake
-        env:
-          CC:  ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake build-essential ninja-build
+
+      - name: Configure (CMake)
         run: |
           cmake -B build \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DMINIMA_BUILD_TESTS=ON
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMINIMA_BUILD_TESTS=ON \
+            -DMINIMA_CRYPTO_OPENSSL=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -G Ninja
 
       - name: Build
         run: cmake --build build --parallel
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure --parallel 4
+        run: ctest --test-dir build --output-on-failure
+
+  clang-build:
+    name: Build (clang, Ubuntu 22.04)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake clang-15 ninja-build
+
+      - name: Configure (Clang)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=clang++-15 \
+            -DMINIMA_BUILD_TESTS=ON \
+            -DMINIMA_CRYPTO_OPENSSL=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
