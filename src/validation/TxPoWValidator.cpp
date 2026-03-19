@@ -94,11 +94,11 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
         }
 
         // Get the script for this coin's address
-        auto scriptOpt = witness.scriptForAddress(utxoCoin->address().addressData());
+        auto scriptOpt = witness.scriptForAddress(utxoCoin->address().hash());
         if (!scriptOpt.has_value()) {
             std::ostringstream oss;
             oss << "Script check: no script for input " << i
-                << " (address: " << utxoCoin->address().toString() << ")";
+                << " (address: " << utxoCoin->address().toHex() << ")";
             return ValidationResult::fail(oss.str());
         }
 
@@ -108,7 +108,7 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
         MiniData scriptHash = crypto::Hash::sha3_256(
             std::vector<uint8_t>(script.begin(), script.end())
         );
-        if (!(scriptHash == utxoCoin->address().addressData())) {
+        if (!(scriptHash == utxoCoin->address().hash())) {
             std::ostringstream oss;
             oss << "Script check: script hash mismatch for input " << i;
             return ValidationResult::fail(oss.str());
@@ -125,7 +125,7 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
             // We don't have creation block here, use 0 (can be enhanced with MMR)
             contract.setCoinAge(MiniNumber::ZERO);
 
-            Value result = contract.execute();
+            kissvm::Value result = contract.execute();
             if (!contract.isTrue()) {
                 std::ostringstream oss;
                 oss << "Script check: script returned FALSE for input " << i;
