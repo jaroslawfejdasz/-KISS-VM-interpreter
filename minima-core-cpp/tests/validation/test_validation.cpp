@@ -496,7 +496,7 @@ TEST_SUITE("TxPoWValidator - Full Pipeline") {
             "EEEE000000000000000000000000000000000000000000000000000000000002",
             s2, "10"
         );
-        Coin out = makeOutputCoin(script, "19");
+        Coin out = makeOutputCoin("RETURN TRUE", "19");
 
         MockUTxO utxo;
         utxo.add(inp1);
