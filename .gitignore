@@ -1,21 +1,12 @@
-# Build
 build/
-cmake-build-*/
+build-*/
 *.o
 *.a
 *.so
 *.dylib
-CMakeFiles/
 CMakeCache.txt
+CMakeFiles/
 cmake_install.cmake
 Makefile
 CTestTestfile.cmake
-
-# IDE
-.vscode/
-.idea/
-*.swp
-.DS_Store
-
-# Generated
 _deps/
