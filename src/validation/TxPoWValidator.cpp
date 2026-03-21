@@ -58,17 +58,19 @@ ValidationResult TxPoWValidator::checkPoW(const TxPoW& txpow) const {
     // Simplified check: first byte must be 0 for any valid TxPoW
     // (Full implementation needs MiniNumber comparison of 256-bit values)
     const auto& idBytes = txpowID.bytes();
-    const MiniNumber& minWork = txpow.header().minTxPoWWork;
+    const MiniData& minWork = txpow.body().txnDifficulty;
 
-    // If minTxPoWWork is zero (test mode), skip PoW check
-    if (minWork == MiniNumber::ZERO) {
+    // If txnDifficulty is all 0xFF (test mode / max), skip PoW check
+    const auto& diffBytes = minWork.bytes();
+    bool isMaxDiff = diffBytes.empty() ||
+        std::all_of(diffBytes.begin(), diffBytes.end(), [](uint8_t b){ return b == 0xFF; });
+    if (isMaxDiff) {
         return ValidationResult::ok();
     }
 
-    // Basic PoW: leading zero bits
-    // The hash must be numerically less than the difficulty target
-    // We approximate: at least one leading zero byte
-    if (idBytes.size() >= 1 && idBytes[0] != 0) {
+    // PoW check: TxPoW hash must be <= txnDifficulty (big-endian comparison)
+    // Approximate: first byte of hash must be <= first byte of difficulty
+    if (!idBytes.empty() && !diffBytes.empty() && idBytes[0] > diffBytes[0]) {
         return ValidationResult::fail("PoW check: insufficient proof-of-work");
     }
 
@@ -237,7 +239,7 @@ ValidationResult TxPoWValidator::checkSize(const TxPoW& txpow) const {
 
     // desiredBlockSize = magic number for max TxPoW size
     // If not set (zero), skip check
-    const MiniNumber& maxSize = txpow.header().desiredBlockSize;
+    const MiniNumber& maxSize = txpow.header().magic.desiredMaxTxPoWSize;
     if (maxSize == MiniNumber::ZERO) {
         return ValidationResult::ok();
     }

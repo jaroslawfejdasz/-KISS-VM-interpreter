@@ -9,6 +9,7 @@
 #include "Functions.hpp"
 #include "../Contract.hpp"
 #include "../../crypto/Hash.hpp"
+#include "../../crypto/RSA.hpp"
 #include "../../objects/Coin.hpp"
 #include <stdexcept>
 #include <algorithm>
@@ -142,24 +143,28 @@ Value SIGNEDBY(const std::vector<Value>& args, Contract& ctx) {
 }
 
 // CHECKSIG(pubkey_hex, data_hex, sig_hex) → BOOLEAN
-// Verifies a Schnorr signature directly
+// RSA SHA256withRSA signature verification.
+// Java: Signature.getInstance("SHA256withRSA").verify(pubKey, data, sig)
 Value CHECKSIG(const std::vector<Value>& args, Contract& ctx) {
     requireArgs(args, 3, "CHECKSIG");
     const MiniData& pubkey = hexArg(args, 0, "CHECKSIG");
-    // data and sig
     const MiniData& data   = hexArg(args, 1, "CHECKSIG");
     const MiniData& sig    = hexArg(args, 2, "CHECKSIG");
 
-    // Find matching sig in witness
+#ifdef MINIMA_OPENSSL
+    try {
+        return Value::boolean(crypto::RSA::verify(pubkey, data, sig));
+    } catch (...) {
+        return Value::boolean(false);
+    }
+#else
+    // Without OpenSSL: witness-presence fallback (testing only)
     for (const auto& sp : ctx.witness().signatures()) {
-        if (sp.pubKey == pubkey && sp.signature == sig) {
-            // Verify the signature is for 'data' — simplified: accept if present
-            // Full Schnorr verification would go here
-            (void)data;
+        if (sp.pubKey == pubkey && sp.signature == sig)
             return Value::boolean(true);
-        }
     }
     return Value::boolean(false);
+#endif
 }
 
 // MULTISIG(n, pubkey1, pubkey2, ...) → BOOLEAN

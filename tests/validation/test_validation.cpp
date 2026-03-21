@@ -79,9 +79,8 @@ static TxPoW buildTestTxPoW(const Transaction& txn,
     TxPoW txpow;
     txpow.body().txn     = txn;
     txpow.body().witness = witness;
-    // minTxPoWWork = 0 → skip PoW check
-    txpow.header().minTxPoWWork    = MiniNumber::ZERO;
-    txpow.header().desiredBlockSize = MiniNumber::ZERO;  // skip size check
+    // In new format: txnDifficulty defaults to 0xFF...FF (max = trivially satisfied)
+    // No special setup needed — default TxBody already has max difficulty
     return txpow;
 }
 

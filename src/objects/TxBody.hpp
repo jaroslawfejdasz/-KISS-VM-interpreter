@@ -1,30 +1,49 @@
 #pragma once
 /**
- * TxBody — the transaction payload inside a TxPoW unit.
+ * TxBody — transaction payload inside TxPoW.
  *
- * Contains the actual transaction, witness proofs, and (if this TxPoW
- * is a block) the list of included transactions.
+ * Minima Java reference: src/org/minima/objects/TxBody.java
+ *
+ * Wire format — EXACT Java writeDataStream order:
+ *   prng            : MiniData   (32 random bytes)
+ *   txnDifficulty   : MiniData   (32-byte difficulty target)
+ *   transaction     : Transaction
+ *   witness         : Witness
+ *   burnTransaction : Transaction
+ *   burnWitness     : Witness
+ *   txnList count   : MiniNumber
+ *   txnList[]       : MiniData × count
  */
 
 #include "Transaction.hpp"
 #include "Witness.hpp"
 #include "../types/MiniData.hpp"
 #include <vector>
+#include <cstdint>
 
 namespace minima {
 
 class TxBody {
 public:
-    Transaction              txn;
-    Witness                  witness;
-    std::vector<MiniData>    burnTxns;     // TxPoW IDs burned to raise PoW
-    std::vector<MiniData>    txnList;      // TxPoW IDs included (if block)
+    MiniData   prng;             // 32 random bytes — re-rolled each mine()
+    MiniData   txnDifficulty;    // 32-byte target for txn acceptance
+    Transaction txn;
+    Witness     witness;
+    Transaction burnTxn;         // optional burn (increases PoW)
+    Witness     burnWitness;
+    std::vector<MiniData> txnList; // TxPoW IDs in this block
 
-    bool isEmptyTxn() const;  // no inputs/outputs — pure PoW pulse
+    TxBody();
 
-    MiniData             computeHash() const;  // SHA3(serialise())
-    std::vector<uint8_t> serialise()   const;
+    bool     isEmptyTxn() const;
+    MiniData computeHash() const;
+    void     resetPRNG();
+
+    std::vector<uint8_t> serialise() const;
     static TxBody        deserialise(const uint8_t* data, size_t& offset);
+    static TxBody        deserialise(const std::vector<uint8_t>& data, size_t& offset) {
+        size_t off = 0; return deserialise(data.data(), off);
+    }
 };
 
 } // namespace minima

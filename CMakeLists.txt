@@ -35,7 +35,8 @@ add_library(minima-core STATIC
     src/kissvm/functions/Functions.cpp
 
     src/crypto/Hash.cpp
-    src/crypto/Schnorr.cpp
+    src/crypto/RSA.cpp
+    src/objects/Magic.cpp
 
     src/serialization/DataStream.cpp
 

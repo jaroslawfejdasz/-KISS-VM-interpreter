@@ -2,36 +2,21 @@
 /**
  * TxPoW — Transaction Proof of Work unit.
  *
- * TxPoW is Minima's fundamental unit. Every user-submitted transaction IS a
- * TxPoW — it contains a transaction AND a proof-of-work header. Blocks are
- * simply TxPoW units with sufficient PoW to cross the block threshold.
+ * Minima Java reference: src/org/minima/objects/TxPoW.java
  *
- * This unification (transaction == potential block) is what allows every
- * node to participate in consensus without dedicated miners.
+ * Wire format:
+ *   header       : TxHeader (always)
+ *   bodyPresent  : uint8 (0x00=false, 0x01=true)
+ *   body         : TxBody (only if bodyPresent)
  *
- * Minima reference: src/org/minima/objects/TxPoW.java
- *
- * Structure:
- *   TxPoW
- *   ├── TxHeader   (PoW header — what gets hashed)
- *   │   ├── block number
- *   │   ├── timestamp
- *   │   ├── parent TxPoW ID
- *   │   ├── nonce (varies during mining)
- *   │   ├── mmr root (coin accumulator)
- *   │   └── body hash
- *   ├── TxBody     (transaction data)
- *   │   ├── Transaction (inputs/outputs)
- *   │   ├── Witness     (signatures/scripts)
- *   │   └── list of TxPoW IDs in this block (if block-level unit)
- *   └── TxBlock    (block-level metadata, only set if this is a block)
+ * TxPoW ID   = SHA3(SHA3(TxHeader bytes))  — double SHA3, header only
+ * PoW hash   = SHA2(TxHeader bytes)        — single SHA2
+ * isBlock()  = SHA2(header) <= blockDifficulty  (big-endian uint comparison)
  */
 
 #include "TxHeader.hpp"
 #include "TxBody.hpp"
 #include "../types/MiniData.hpp"
-#include "../types/MiniNumber.hpp"
-#include <memory>
 
 namespace minima {
 
@@ -39,33 +24,29 @@ class TxPoW {
 public:
     TxPoW() = default;
 
-    // ── Identity ─────────────────────────────────────────────────────────────
-    // TxPoW ID = SHA3(SHA3(header_bytes))  (double hash)
-    MiniData computeID() const;
+    MiniData computeID()    const;   // SHA3(SHA3(header))
+    MiniData getPoWHash()   const;   // SHA2(header)
+    bool     isBlock()      const;   // powHash <= blockDifficulty
+    bool     isTransaction() const;  // powHash <= txnDifficulty
+    int      getSuperLevel() const;
 
-    // ── Header / Body ─────────────────────────────────────────────────────────
     TxHeader&       header()       { return m_header; }
     const TxHeader& header() const { return m_header; }
     TxBody&         body()         { return m_body; }
     const TxBody&   body()   const { return m_body; }
 
-    // ── PoW checks ────────────────────────────────────────────────────────────
-    MiniNumber  getPoWScore()  const;   // numeric value of PoW
-    bool        isBlock()      const;   // PoW >= block difficulty
-    bool        isTransaction()const;   // always true if valid TxPoW
+    void mine();  // increment nonce + reset PRNG
 
-    // ── Mining ────────────────────────────────────────────────────────────────
-    // Increment nonce and recheck — call in a loop until isBlock() or tx threshold met
-    void        incrementNonce();
-    void        setNonce(uint64_t nonce);
-
-    // ── Serialisation ─────────────────────────────────────────────────────────
-    std::vector<uint8_t> serialise() const;
+    std::vector<uint8_t> serialise(bool includeBody = true) const;
     static TxPoW         deserialise(const uint8_t* data, size_t& offset);
+    static TxPoW         deserialise(const std::vector<uint8_t>& data) {
+        size_t off = 0; return deserialise(data.data(), off);
+    }
 
 private:
     TxHeader m_header;
     TxBody   m_body;
+    static bool hashLE(const MiniData& a, const MiniData& b);
 };
 
 } // namespace minima

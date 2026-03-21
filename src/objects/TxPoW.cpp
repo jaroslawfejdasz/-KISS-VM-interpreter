@@ -1,58 +1,82 @@
+/**
+ * TxPoW.cpp
+ *
+ * ID   = SHA3(SHA3(header_bytes))  — double SHA3
+ * PoW  = SHA2(header_bytes)        — single SHA2
+ * Comparison: big-endian unsigned integer, lower = more work
+ */
 #include "TxPoW.hpp"
+#include "../serialization/DataStream.hpp"
 #include "../crypto/Hash.hpp"
-#include "../types/MiniNumber.hpp"
+#include <algorithm>
 
 namespace minima {
 
-// TxPoW ID = SHA3(SHA3(header_bytes)) — double hash
 MiniData TxPoW::computeID() const {
-    auto headerBytes = m_header.serialise();
-    return crypto::Hash::sha3_256_double(headerBytes);
+    auto hb = m_header.serialise();
+    return crypto::Hash::sha3_256_double(hb);
 }
 
-// PoW score: Minima compares the SHA2 hash of the header (as a large integer)
-// against the difficulty. Lower hash = more PoW.
-// We return the hash as raw MiniData — callers use isBlock()/isTransaction()
-// which compare via MiniNumber deserialized from the hash bytes.
-MiniNumber TxPoW::getPoWScore() const {
-    auto headerBytes = m_header.serialise();
-    auto hash = crypto::Hash::sha2_256(headerBytes);
-    // Interpret 32-byte hash as a big decimal number string (hex notation)
-    // Minima Java uses new BigDecimal(new BigInteger(hash)) for PoW comparison
-    return MiniNumber::fromBytes(hash.bytes());
+MiniData TxPoW::getPoWHash() const {
+    auto hb = m_header.serialise();
+    return crypto::Hash::sha2_256(hb);
+}
+
+// a <= b as big-endian unsigned integers
+bool TxPoW::hashLE(const MiniData& a, const MiniData& b) {
+    const auto& ab = a.bytes();
+    const auto& bb = b.bytes();
+    size_t maxLen = std::max(ab.size(), bb.size());
+    for (size_t i = 0; i < maxLen; ++i) {
+        size_t ia = i + ab.size() < maxLen ? 0 : i - (maxLen - ab.size());
+        size_t ib = i + bb.size() < maxLen ? 0 : i - (maxLen - bb.size());
+        uint8_t av = (i < maxLen - ab.size()) ? 0 : ab[ia];
+        uint8_t bv = (i < maxLen - bb.size()) ? 0 : bb[ib];
+        if (av < bv) return true;
+        if (av > bv) return false;
+    }
+    return true; // equal
 }
 
 bool TxPoW::isBlock() const {
-    MiniNumber score = getPoWScore();
-    // Block if hash <= blockDifficulty (lower hash = more work done)
-    return score.isLessEqual(m_header.blockDifficulty);
+    return hashLE(getPoWHash(), m_header.blockDifficulty);
 }
 
 bool TxPoW::isTransaction() const {
-    MiniNumber score = getPoWScore();
-    return score.isLessEqual(m_header.txnDifficulty);
+    return hashLE(getPoWHash(), m_body.txnDifficulty);
 }
 
-void TxPoW::incrementNonce() { m_header.nonce++; }
-void TxPoW::setNonce(uint64_t nonce) { m_header.nonce = nonce; }
+int TxPoW::getSuperLevel() const {
+    // Simple: count leading zero bytes beyond block difficulty
+    const auto& diff = m_header.blockDifficulty.bytes();
+    const auto& id   = computeID().bytes();
+    int level = 0;
+    size_t len = std::min(diff.size(), id.size());
+    for (size_t i = 0; i < len; ++i) {
+        if (id[i] == 0 && diff[i] != 0) { ++level; }
+        else break;
+    }
+    return level;
+}
 
-// Wire format:
-//   header : TxHeader (serialised)
-//   body   : TxBody   (serialised)
+void TxPoW::mine() {
+    m_header.incrementNonce();
+    m_body.resetPRNG();
+}
 
-std::vector<uint8_t> TxPoW::serialise() const {
-    std::vector<uint8_t> out;
-    auto hb = m_header.serialise();
-    auto bb = m_body.serialise();
-    out.insert(out.end(), hb.begin(), hb.end());
-    out.insert(out.end(), bb.begin(), bb.end());
-    return out;
+std::vector<uint8_t> TxPoW::serialise(bool includeBody) const {
+    DataStream ds;
+    ds.writeBytes(m_header.serialise());
+    ds.writeUInt8(includeBody ? 0x01 : 0x00);
+    if (includeBody) ds.writeBytes(m_body.serialise());
+    return ds.buffer();
 }
 
 TxPoW TxPoW::deserialise(const uint8_t* data, size_t& offset) {
     TxPoW t;
     t.m_header = TxHeader::deserialise(data, offset);
-    t.m_body   = TxBody::deserialise(data, offset);
+    uint8_t present = data[offset++];
+    if (present) t.m_body = TxBody::deserialise(data, offset);
     return t;
 }
 
