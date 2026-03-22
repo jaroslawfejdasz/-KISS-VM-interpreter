@@ -31,14 +31,16 @@ TEST_CASE("DifficultyAdjust: first 8 blocks return minTxPoWWork") {
     std::vector<BlockSummary> chain;
     chain.emplace_back(7, 1000, makeDiff(0x10));
     auto d = DifficultyAdjust::calculate(chain);
-    CHECK(d.bytes() == minTxPoWWork().bytes());
+    auto minWork = minTxPoWWork();
+    CHECK(d.bytes() == minWork.bytes());
 }
 
 TEST_CASE("DifficultyAdjust: not enough history returns minTxPoWWork") {
     // Only 10 blocks — far fewer than 256
     auto chain = buildChain(10, 50000, makeDiff(0x00));
     auto d = DifficultyAdjust::calculate(chain);
-    CHECK(d.bytes() == minTxPoWWork().bytes());
+    auto minWork = minTxPoWWork();
+    CHECK(d.bytes() == minWork.bytes());
 }
 
 TEST_CASE("DifficultyAdjust: perfect speed returns approx same difficulty") {
@@ -73,7 +75,8 @@ TEST_CASE("DifficultyAdjust: too-fast blocks → lower difficulty (easier)") {
     // First byte of baseDiff is 0x10; newDiff first byte should be <= 0x10
     // Actually clamped at MIN_SPEED_BOUND=0.25 so it's 0.25 * baseDiff
     // We just check it's valid (not the all-0xFF minWork)
-    CHECK(newDiff.bytes() != minTxPoWWork().bytes());
+    auto minWork3 = minTxPoWWork();
+    CHECK(newDiff.bytes() != minWork3.bytes());
 }
 
 TEST_CASE("DifficultyAdjust: too-slow blocks → higher difficulty (easier actually)") {
