@@ -10,8 +10,6 @@
 #include <vector>
 
 namespace minima {
-struct MiniDataHash;
-struct MiniDataEqual;
 } // forward
 
 namespace minima::chain {

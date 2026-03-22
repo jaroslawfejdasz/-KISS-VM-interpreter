@@ -78,4 +78,18 @@ private:
 
 using MiniHash = MiniData;
 
+/// std::unordered_map hasher/equal for MiniData (shared across modules)
+struct MiniDataHash {
+    size_t operator()(const MiniData& d) const {
+        size_t h = 0;
+        for (uint8_t b : d.bytes()) h = h * 31 + b;
+        return h;
+    }
+};
+struct MiniDataEqual {
+    bool operator()(const MiniData& a, const MiniData& b) const {
+        return a.bytes() == b.bytes();
+    }
+};
+
 } // namespace minima

@@ -23,18 +23,7 @@
 namespace minima::mempool {
 
 // ── Hashers for MiniData ──────────────────────────────────────────────────────
-struct MiniDataHashM {
-    size_t operator()(const MiniData& d) const {
-        size_t h = 0;
-        for (auto b : d.bytes()) h = h * 31 + b;
-        return h;
-    }
-};
-struct MiniDataEqualM {
-    bool operator()(const MiniData& a, const MiniData& b) const {
-        return a.bytes() == b.bytes();
-    }
-};
+
 
 class Mempool {
 public:
@@ -120,8 +109,8 @@ public:
 private:
     size_t m_capacity;
 
-    std::unordered_map<MiniData, TxPoW,  MiniDataHashM, MiniDataEqualM> m_byID;
-    std::unordered_set<MiniData,          MiniDataHashM, MiniDataEqualM> m_spentInPool;
+    std::unordered_map<MiniData, TxPoW,  minima::MiniDataHash, minima::MiniDataEqual> m_byID;
+    std::unordered_set<MiniData,          minima::MiniDataHash, minima::MiniDataEqual> m_spentInPool;
     std::deque<MiniData>                                                  m_order;
 
     void _evict(const MiniData& id) {

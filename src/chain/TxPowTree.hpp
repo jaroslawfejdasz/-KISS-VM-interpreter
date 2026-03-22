@@ -15,19 +15,6 @@
 
 namespace minima::chain {
 
-struct MiniDataHash {
-    size_t operator()(const MiniData& d) const {
-        size_t h = 0;
-        for (uint8_t b : d.bytes()) h = h * 31 + b;
-        return h;
-    }
-};
-struct MiniDataEqual {
-    bool operator()(const MiniData& a, const MiniData& b) const {
-        return a.bytes() == b.bytes();
-    }
-};
-
 class TxPowTree {
 public:
     TxPowTree() : m_root(nullptr), m_tip(nullptr) {}
@@ -104,7 +91,7 @@ private:
 
     TxPoWTreeNode* m_root;
     TxPoWTreeNode* m_tip;
-    std::unordered_map<MiniData, TxPoWTreeNode*, MiniDataHash, MiniDataEqual> m_nodes;
+    std::unordered_map<MiniData, TxPoWTreeNode*, minima::MiniDataHash, minima::MiniDataEqual> m_nodes;
 };
 
 } // namespace minima::chain
