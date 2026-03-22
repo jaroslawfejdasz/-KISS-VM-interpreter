@@ -1,121 +1,107 @@
-# Minima Core C++ — Implementation Status
+# Implementation Status — minima-core-cpp
 
-**Goal:** 1:1 reimplementation of Minima blockchain core in C++20, suitable for bare-metal ARM chips.
+Last updated: 2026-03-22
 
----
+## Test suites: 12/12 pass ✅
 
-## ✅ DONE — builds, tests pass, wire-exact
+| Suite           | Tests | Status |
+|----------------|-------|--------|
+| test_mini_number | types | ✅ |
+| test_mini_data   | types | ✅ |
+| test_kissvm      | KISS VM interpreter | ✅ |
+| test_txpow       | TxPoW / TxHeader / TxBody | ✅ |
+| test_validation  | TxPoWValidator | ✅ |
+| test_mmr         | Merkle Mountain Range | ✅ |
+| test_chain       | BlockStore / ChainProcessor | ✅ |
+| test_token       | Token / Greeting / TxBlock | ✅ |
+| test_mining      | TxPoWMiner | ✅ |
+| test_difficulty  | DifficultyAdjust | ✅ |
+| test_network     | NIOMessage (P2P wire) | ✅ |
+| test_ibd         | IBD (Initial Blockchain Download) | ✅ |
 
-### Types
-- `MiniNumber` — BigDecimal-compatible, full arithmetic, wire format 1:1 Java
-- `MiniData` — arbitrary byte array, hex encode/decode
-- `MiniString` — UTF-8 string with Minima wire format
+## Implemented modules
 
-### Serialization
-- `DataStream` — write/read primitives, big-endian, matches Java DataOutputStream
+### Core types
+- [x] MiniNumber (BigDecimal-compatible, full arithmetic)
+- [x] MiniData (byte array, HEX encoding)
+- [x] MiniString (UTF-8)
 
-### Crypto
-- `Hash` — SHA2-256 (PoW), SHA3-256 (IDs), SHA3-double (TxPoW ID)
-- `RSA` — RSA-1024 SHA256withRSA (conditional: `-DMINIMA_OPENSSL` for real, stub otherwise)
-- `Schnorr.hpp` — kept as stub (Minima uses RSA, not Schnorr)
+### Objects
+- [x] TxHeader (wire-exact: superParents[32] RLE, Magic, blockDifficulty)
+- [x] TxBody (wire-exact: prng, txnDifficulty, burnTxn)
+- [x] TxPoW (ID = SHA3(SHA3(header)), getPoWHash = SHA2(header))
+- [x] Transaction (inputs/outputs/state variables)
+- [x] Witness (signatures, scripts, proofs)
+- [x] Coin (UTxO model)
+- [x] CoinProof (MMR proof for coin)
+- [x] Address (script → SHA3 hash)
+- [x] StateVariable (key-value, 255 slots)
+- [x] Token (custom tokens, tokenID = SHA3(coinID+scale+name+script))
+- [x] Magic (network parameters, calculateNewCurrent)
+- [x] Greeting (initial handshake, version, topBlock, chain IDs)
+- [x] TxBlock (block + new/spent coins + MMR peaks)
+- [x] IBD (Initial Blockchain Download, serialise/deserialise)
 
-### Objects (wire-exact)
-- `Address` — SHA3(script), 32 bytes
-- `StateVariable` — port + value (STRING/NUMBER/HEX)
-- `Coin` — UTxO: coinID, amount, address, tokenID, stateVars, flags
-- `Transaction` — inputs[] + outputs[] + stateVars[]
-- `Witness` — signatures[] + scripts[]
-- `Magic` — 6 consensus params (currentMax/desiredMax × 3)
-- `TxHeader` — WIRE-EXACT: nonce, chainID, timeMilli, blockNumber, blockDifficulty(MiniData), superParents[32] RLE-encoded, mmrRoot/mmrTotal, Magic, customHash, bodyHash
-- `TxBody` — WIRE-EXACT: prng(32B random), txnDifficulty(MiniData), txn, witness, burnTxn, burnWitness, txnList
-- `TxPoW` — ID=SHA3(SHA3(header)), PoW=SHA2(header), body-present flag
+### Cryptography
+- [x] SHA2-256 (pure C++)
+- [x] SHA3-256 (pure C++)
+- [x] RSA-1024 SHA256withRSA (signature verify)
+- [ ] Schnorr (stub — Java uses RSA not Schnorr)
 
 ### KISS VM
-- `Tokenizer` + `Parser` + `Interpreter` — full KISS VM
-- All 42+ built-in functions: SIGNEDBY, CHECKSIG(RSA), MULTISIG, STATE/PREVSTATE/SAMESTATE, VERIFYOUT/VERIFYIN, SHA2/SHA3, CONCAT/SUBSET/LEN, @BLOCK/@COINAGE/@AMOUNT, all math/logic/string ops
-- Limits: 1024 instructions, stack depth 64
+- [x] Tokenizer (all token types)
+- [x] Parser (full grammar)
+- [x] Interpreter (42+ functions)
+- [x] Environment (stack, state variables, transaction context)
+- [x] All built-ins: SIGNEDBY, CHECKSIG, MULTISIG, VERIFYOUT, VERIFYIN,
+      SHA2, SHA3, CONCAT, SUBSET, GETOUTADDR, GETOUTAMT,
+      SUMINPUTS, STATE, PREVSTATE, SAMESTATE, @BLOCK, @COINAGE, etc.
 
 ### MMR (Merkle Mountain Range)
-- `MMRData` / `MMREntry` / `MMRProof` / `MMRSet`
-- addLeaf, getProof, verifyProof, getRoot — 1:1 Java
+- [x] MMRData, MMREntry, MMRProof
+- [x] MMRSet (add, get, getProof, verifyProof)
+
+### Chain layer
+- [x] BlockStore (in-memory block storage)
+- [x] ChainState (UTxO set management)
+- [x] UTxOSet (add/spend/query coins)
+- [x] ChainProcessor (process blocks, apply transactions)
+- [x] DifficultyAdjust (Java-exact retarget algorithm)
 
 ### Validation
-- `TxPoWValidator` — PoW check, balance check, coinID uniqueness, state vars, script execution, size check
+- [x] TxPoWValidator (PoW check, script execution, signature verify)
 
-### Chain
-- `BlockStore` — hash+number indexed, ancestor walk
-- `ChainState` — tip tracking
-- `UTxOSet` — add/spend/balance by address+token
-- `ChainProcessor` — block processing, duplicate rejection, UTxO apply
+### Mining
+- [x] TxPoWMiner (nonce increment, difficulty check, cancel flag)
 
----
+### Network (P2P wire protocol)
+- [x] NIOMessage (24 message types, encode/decode)
+- [x] IBD (Initial Blockchain Download)
 
-## 🔴 TODO — critical for full node
+### Mempool
+- [x] Mempool (add/remove/query pending TxPoW)
 
-### P2P / Network
-- [ ] `TxPoW` flood-fill propagation protocol
-- [ ] Peer discovery / connection management
-- [ ] Sync protocol (IBD — Initial Block Download)
+### Serialization
+- [x] DataStream (read/write primitives)
 
-### Token system
-- [ ] `Token` object (Java: Token.java)
-- [ ] Token creation transaction
-- [ ] Token balance tracking in UTxOSet
+## TODO (next priority)
 
-### Mining (TxPoW production)
-- [ ] TxPoW miner loop (increment nonce, check difficulty)
-- [ ] Difficulty adjustment (per-block)
-- [ ] Super-block cascade (32 levels)
+1. **Persistence** — LevelDB or SQLite for BlockStore/UTxOSet
+2. **Network I/O** — actual TCP socket layer (NIOServer/NIOClient)
+3. **P2P sync loop** — IBD request/response, flood-fill TxPoW propagation
+4. **Cascade** — chain cascade/pruning (CascadeNode, Cascade class)
+5. **ARM cross-compile** — CMake toolchain file for aarch64
+6. **npm publish** — minima-test framework
 
-### Pulse / Sync
-- [ ] `TxPoWMiner` thread
-- [ ] `TxPoWChecker` — incoming tx verification
-- [ ] IBD state machine
+## Architecture
 
-### Persistence
-- [ ] Block database (LevelDB or SQLite for embedded)
-- [ ] UTxOSet persistence
-
-### MiniDapp / Maxima
-- Not in scope for chip firmware (these are L3/L2 features)
-
----
-
-## 🧪 Test Coverage
-
-| Module          | Tests | Status |
-|----------------|-------|--------|
-| MiniNumber      | ~20   | ✅     |
-| MiniData        | ~15   | ✅     |
-| KISS VM         | ~30   | ✅     |
-| TxPoW objects   | ~15   | ✅     |
-| Validation      | ~10   | ✅     |
-| MMR             | ~15   | ✅     |
-| Chain           | ~12   | ✅     |
-| **TOTAL**       | **~117** | **7/7 suites pass** |
-
----
-
-## Build
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-cmake --build build -j$(nproc)
-cd build && ctest --output-on-failure
 ```
-
-ARM cross-compile:
-```bash
-cmake -B build-arm -DCMAKE_TOOLCHAIN_FILE=cmake/arm-cortex-m4.cmake \
-      -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-cmake --build build-arm -j$(nproc)
+L1: Minima (UTxO flood-fill P2P TxPoW)
+    ↓
+    Objects: TxPoW → TxBlock → IBD
+    Chain:   BlockStore + UTxOSet + ChainProcessor
+    Crypto:  SHA2/SHA3/RSA
+    KISSVM:  Interpreter + all built-ins
+    Network: NIOMessage (24 types) + IBD
+    Mining:  TxPoWMiner + DifficultyAdjust
 ```
-
----
-
-## Wire compatibility
-
-TxHeader and TxBody serialisation matches Java `writeDataStream()` byte-for-byte.
-A C++ node can parse blocks produced by a Java node and vice versa.
-
-Key: **TxPoW ID = SHA3(SHA3(TxHeader bytes))** — double SHA3, header only.
