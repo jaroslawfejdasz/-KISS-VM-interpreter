@@ -89,6 +89,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         -Wall -Wextra -Wpedantic -Wno-unused-parameter)
 endif()
 
+
+# ── Node executable ───────────────────────────────────────────────────────────
+add_executable(minima_node src/main.cpp)
+target_link_libraries(minima_node PRIVATE minima-core)
+target_include_directories(minima_node PRIVATE ${CMAKE_SOURCE_DIR}/src)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(minima_node PRIVATE -Wall -Wextra -Wno-unused-parameter)
+endif()
 # ── Tests ─────────────────────────────────────────────────────────────────────
 if(MINIMA_BUILD_TESTS)
     enable_testing()
