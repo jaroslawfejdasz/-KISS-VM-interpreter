@@ -1,8 +1,14 @@
 {
-  "name": "create-minidapp",
+  "name": "@jaroslawfejdasz/create-minidapp",
   "version": "0.1.0",
   "description": "Scaffold a new Minima MiniDapp project",
-  "keywords": ["minima", "blockchain", "minidapp", "scaffold", "create"],
+  "keywords": [
+    "minima",
+    "blockchain",
+    "minidapp",
+    "scaffold",
+    "create"
+  ],
   "author": "Minima Developer Toolkit",
   "license": "MIT",
   "repository": {
@@ -15,14 +21,20 @@
   "bin": {
     "create-minidapp": "dist/cli.js"
   },
-  "files": ["dist", "templates", "README.md"],
+  "files": [
+    "dist",
+    "templates",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build"
   },
-  "engines": { "node": ">=18.0.0" },
-  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "typescript": "^5.4.0"
   }
 }

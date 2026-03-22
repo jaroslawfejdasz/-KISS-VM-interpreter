@@ -2,7 +2,13 @@
   "name": "minima-contracts",
   "version": "0.1.0",
   "description": "Production-ready KISS VM smart contract templates for Minima blockchain",
-  "keywords": ["minima", "blockchain", "kissvm", "smart-contracts", "templates"],
+  "keywords": [
+    "minima",
+    "blockchain",
+    "kissvm",
+    "smart-contracts",
+    "templates"
+  ],
   "author": "Minima Developer Toolkit",
   "license": "MIT",
   "repository": {
@@ -12,13 +18,20 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "contracts", "README.md"],
+  "files": [
+    "dist",
+    "contracts",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build"
   },
-  "engines": { "node": ">=18.0.0" },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "typescript": "^5.4.0"
   }
 }

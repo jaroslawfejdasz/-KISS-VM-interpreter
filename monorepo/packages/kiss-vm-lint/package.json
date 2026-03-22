@@ -2,7 +2,14 @@
   "name": "kiss-vm-lint",
   "version": "0.1.0",
   "description": "Static analyzer and linter for Minima KISS VM smart contracts",
-  "keywords": ["minima", "blockchain", "kissvm", "linter", "static-analysis", "smart-contracts"],
+  "keywords": [
+    "minima",
+    "blockchain",
+    "kissvm",
+    "linter",
+    "static-analysis",
+    "smart-contracts"
+  ],
   "author": "Minima Developer Toolkit",
   "license": "MIT",
   "repository": {
@@ -15,14 +22,19 @@
   "bin": {
     "kiss-vm-lint": "dist/cli.js"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build"
   },
-  "engines": { "node": ">=18.0.0" },
-  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "typescript": "^5.4.0"
   }
 }
