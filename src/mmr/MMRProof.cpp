@@ -80,4 +80,20 @@ void MMRProof::deserialise(DataStream& ds) {
     readVec(m_rightPeaks);
 }
 
+// ── Convenience wrappers ─────────────────────────────────────────────────
+std::vector<uint8_t> MMRProof::serialise() const {
+    DataStream ds;
+    serialise(ds);
+    return ds.buffer();
+}
+
+MMRProof MMRProof::deserialise(const uint8_t* data, size_t& offset) {
+    constexpr size_t MAX_PROOF = 16 * 1024;
+    DataStream ds(data + offset, MAX_PROOF);
+    MMRProof proof;
+    proof.deserialise(ds);
+    offset += ds.position();
+    return proof;
+}
+
 } // namespace minima

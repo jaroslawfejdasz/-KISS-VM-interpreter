@@ -46,6 +46,10 @@ public:
     void serialise(DataStream& ds) const;
     void deserialise(DataStream& ds);
 
+    // Convenience wrappers for byte-vector based serialisation
+    std::vector<uint8_t> serialise() const;
+    static MMRProof deserialise(const uint8_t* data, size_t& offset);
+
 private:
     uint64_t             m_blocktime{0};
     uint64_t             m_entry{0};

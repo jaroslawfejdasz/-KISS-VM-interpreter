@@ -75,9 +75,10 @@ TEST_SUITE("KISS VM — SIGNEDBY") {
         const std::string pubKey = "0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD";
 
         Witness wit;
-        SignatureProof sp;
-        sp.pubKey    = MiniData::fromHex(pubKey);
-        sp.signature = MiniData::fromHex("0x" + std::string(128, 'A')); // mock sig
+        Signature sp;
+        sp.rootPublicKey = MiniData::fromHex(pubKey);
+        sp.publicKey     = MiniData::fromHex(pubKey);
+        sp.signature     = MiniData::fromHex("0x" + std::string(128, 'A')); // mock sig
         wit.addSignature(sp);
 
         CHECK(runScript("RETURN SIGNEDBY(" + pubKey + ")", Transaction{}, wit));
@@ -231,8 +232,8 @@ TEST_SUITE("KISS VM — MULTISIG") {
     TEST_CASE("MULTISIG 2-of-3 with 2 present → true") {
         MiniData k1({0x01}), k2({0x02}), k3({0x03});
         Witness w;
-        w.addSignature({k1, MiniData({0xAA})});
-        w.addSignature({k2, MiniData({0xBB})});
+        w.addSignature(([&](){ Signature s; s.rootPublicKey = k1; s.publicKey = k1; s.signature = MiniData({0xAA}); return s; }()));
+        w.addSignature(([&](){ Signature s; s.rootPublicKey = k2; s.publicKey = k2; s.signature = MiniData({0xBB}); return s; }()));
         Contract c("RETURN MULTISIG(2, 0x01, 0x02, 0x03)", Transaction{}, w);
         c.execute();
         CHECK(c.isTrue());
@@ -241,7 +242,7 @@ TEST_SUITE("KISS VM — MULTISIG") {
     TEST_CASE("MULTISIG 2-of-3 with 1 present → false") {
         MiniData k1({0x01});
         Witness w;
-        w.addSignature({k1, MiniData({0xAA})});
+        w.addSignature(([&](){ Signature s; s.rootPublicKey = k1; s.publicKey = k1; s.signature = MiniData({0xAA}); return s; }()));
         Contract c("RETURN MULTISIG(2, 0x01, 0x02, 0x03)", Transaction{}, w);
         c.execute();
         CHECK_FALSE(c.isTrue());
@@ -250,7 +251,7 @@ TEST_SUITE("KISS VM — MULTISIG") {
     TEST_CASE("MULTISIG 1-of-1 → true") {
         MiniData k1({0xFF});
         Witness w;
-        w.addSignature({k1, MiniData({0x01})});
+        w.addSignature(([&](){ Signature s; s.rootPublicKey = k1; s.publicKey = k1; s.signature = MiniData({0x01}); return s; }()));
         Contract c("RETURN MULTISIG(1, 0xFF)", Transaction{}, w);
         c.execute();
         CHECK(c.isTrue());
@@ -308,7 +309,7 @@ TEST_SUITE("KISS VM — Real contract patterns") {
     TEST_CASE("Simple payment: SIGNEDBY owner") {
         MiniData owner({0xDE,0xAD,0xBE,0xEF});
         Witness w;
-        w.addSignature({owner, MiniData({0x01})});
+        w.addSignature(([&](){ Signature s; s.rootPublicKey = owner; s.publicKey = owner; s.signature = MiniData({0x01}); return s; }()));
         Contract c("RETURN SIGNEDBY(0xDEADBEEF)", Transaction{}, w);
         c.execute();
         CHECK(c.isTrue());
@@ -340,7 +341,7 @@ TEST_SUITE("KISS VM — Real contract patterns") {
         // Guard that prevents execution if wrong key
         MiniData owner({0x01});
         Witness w;
-        w.addSignature({owner, MiniData({0x01})});
+        w.addSignature(([&](){ Signature s; s.rootPublicKey = owner; s.publicKey = owner; s.signature = MiniData({0x01}); return s; }()));
         Contract c("ASSERT SIGNEDBY(0x01) RETURN TRUE", Transaction{}, w);
         c.execute();
         CHECK(c.isTrue());
