@@ -29,3 +29,5 @@ add_minima_test(test_chain        chain/test_chain.cpp)
 # New modules
 add_minima_test(test_token   objects/test_token.cpp)
 add_minima_test(test_mining  mining/test_mining.cpp)
+
+add_minima_test(test_difficulty chain/test_difficulty.cpp)
