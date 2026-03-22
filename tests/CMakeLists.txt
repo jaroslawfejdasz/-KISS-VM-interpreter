@@ -25,3 +25,7 @@ add_minima_test(test_txpow        objects/test_txpow.cpp)
 add_minima_test(test_validation   validation/test_validation.cpp)
 add_minima_test(test_mmr          mmr/test_mmr.cpp)
 add_minima_test(test_chain        chain/test_chain.cpp)
+
+# New modules
+add_minima_test(test_token   objects/test_token.cpp)
+add_minima_test(test_mining  mining/test_mining.cpp)
