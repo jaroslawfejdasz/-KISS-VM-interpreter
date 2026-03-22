@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(minima-core VERSION 0.1.0 LANGUAGES CXX)
+project(minima-core VERSION 0.1.0 LANGUAGES CXX C)
 
 # ── C++ standard ─────────────────────────────────────────────────────────────
 set(CMAKE_CXX_STANDARD 20)
@@ -7,8 +7,27 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ── Options ───────────────────────────────────────────────────────────────────
-option(MINIMA_BUILD_TESTS  "Build unit tests"           ON)
+option(MINIMA_BUILD_TESTS    "Build unit tests"           ON)
 option(MINIMA_CRYPTO_OPENSSL "Use OpenSSL crypto backend" OFF)
+
+# ── SQLite3 (vendored amalgamation) ───────────────────────────────────────────
+add_library(sqlite3-vendor STATIC
+    src/vendor/sqlite3/sqlite3.c
+)
+target_include_directories(sqlite3-vendor PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sqlite3
+)
+# SQLite compile-time options for performance and thread safety
+target_compile_definitions(sqlite3-vendor PUBLIC
+    SQLITE_THREADSAFE=1
+    SQLITE_DEFAULT_WAL_SYNCHRONOUS=1
+    SQLITE_OMIT_DEPRECATED=1
+)
+# SQLite is C99 — suppress C++ warnings
+set_target_properties(sqlite3-vendor PROPERTIES
+    C_STANDARD 99
+    C_STANDARD_REQUIRED ON
+)
 
 # ── Core library ──────────────────────────────────────────────────────────────
 add_library(minima-core STATIC
@@ -51,6 +70,8 @@ target_include_directories(minima-core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>
 )
+
+target_link_libraries(minima-core PUBLIC sqlite3-vendor)
 
 # ── Crypto backend ────────────────────────────────────────────────────────────
 if(MINIMA_CRYPTO_OPENSSL)
