@@ -24,7 +24,7 @@ static TxBlock makeBlock(int64_t blockNum, const std::string& idHex = "") {
         // encode blockNum into last 8 bytes so IDs differ
         for (int i = 0; i < 8; i++)
             bytes[24 + i] = static_cast<uint8_t>((blockNum >> (i * 8)) & 0xFF);
-        tx.header().txpowID = MiniData(bytes);
+        // txpowID is computed from header hash, not stored directly
     }
     // parent = zero
     tx.header().superParents[0] = MiniData(std::vector<uint8_t>(32, 0));
@@ -152,7 +152,7 @@ TEST_CASE("BlockStore: remove") {
     auto blk = makeBlock(1);
     bs.put(blk);
     CHECK(bs.count() == 1);
-    std::string id = blk.txpow().header().txpowID.toHexString(false);
+    std::string id = blk.txpow().computeID().toHexString(false);
     bs.remove(id);
     CHECK(bs.count() == 0);
 }
