@@ -136,3 +136,30 @@ Limits: **1024 instructions**, **64 stack depth** — enforced at runtime.
 - [Minima Docs](https://docs.minima.global)
 - [Java Reference Implementation](https://github.com/minima-global/Minima)
 - [KISS VM Scripting](https://docs.minima.global/docs/development/contracts-basics)
+
+## Cross-compiling for ARM
+
+Two toolchain files are provided in `cmake/`:
+
+| File | Target | Devices |
+|---|---|---|
+| `toolchain-aarch64.cmake` | aarch64-linux-gnu | Raspberry Pi 4/5, modern Android |
+| `toolchain-armv7.cmake`   | armv7-linux-gnueabihf | Raspberry Pi 2/3, older IoT |
+
+```bash
+# Install cross-compiler (Ubuntu/Debian)
+sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+# Build for ARM64
+cmake -B build-arm64 \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64.cmake \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DMINIMA_BUILD_TESTS=OFF
+cmake --build build-arm64 --parallel
+
+# Verify
+file build-arm64/minima_node
+# → minima_node: ELF 64-bit LSB executable, ARM aarch64
+```
+
+Pre-built ARM binaries are uploaded as GitHub Actions artifacts on every push to `main`.

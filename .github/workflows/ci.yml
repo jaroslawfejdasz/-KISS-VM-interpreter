@@ -7,6 +7,7 @@ on:
     branches: [main]
 
 jobs:
+  # ── Native build + tests (GCC, Ubuntu 22 & 24) ────────────────────────
   build-and-test:
     name: Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -38,6 +39,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  # ── Clang build ────────────────────────────────────────────────────────
   clang-build:
     name: Build (clang, Ubuntu 22.04)
     runs-on: ubuntu-22.04
@@ -65,3 +67,81 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  # ── ARM64 cross-compile (no tests — QEMU not set up) ──────────────────
+  cross-aarch64:
+    name: Cross-compile ARM64
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM64 cross-compiler
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Configure (aarch64)
+        run: |
+          cmake -B build-arm64 \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMINIMA_BUILD_TESTS=OFF \
+            -DMINIMA_CRYPTO_OPENSSL=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build-arm64 --parallel
+
+      - name: Verify binary architecture
+        run: |
+          file build-arm64/minima_node
+          file build-arm64/minima_node | grep -q "ARM aarch64"
+
+      - name: Upload ARM64 binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: minima_node-aarch64-linux-gnu
+          path: build-arm64/minima_node
+          if-no-files-found: error
+
+  # ── ARMv7 cross-compile ────────────────────────────────────────────────
+  cross-armv7:
+    name: Cross-compile ARMv7
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARMv7 cross-compiler
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build \
+            gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+
+      - name: Configure (armv7)
+        run: |
+          cmake -B build-armv7 \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-armv7.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMINIMA_BUILD_TESTS=OFF \
+            -DMINIMA_CRYPTO_OPENSSL=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build-armv7 --parallel
+
+      - name: Verify binary architecture
+        run: |
+          file build-armv7/minima_node
+          file build-armv7/minima_node | grep -q "ARM"
+
+      - name: Upload ARMv7 binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: minima_node-armv7-linux-gnueabihf
+          path: build-armv7/minima_node
+          if-no-files-found: error
