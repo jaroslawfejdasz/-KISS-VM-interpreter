@@ -75,6 +75,24 @@ public:
         return std::nullopt;
     }
 
+
+    // ── Convenience aliases (used by Node) ───────────────────────────────
+
+    /// Create new key and return its address (alias for createNewKey)
+    MiniData createAddress() { return createNewKey(); }
+
+    /// Number of addresses in wallet
+    size_t addressCount() const { return m_keyList.size(); }
+
+    /// Return first (default) address, or empty MiniData if none
+    MiniData defaultAddress() const {
+        if (m_keyList.empty()) return MiniData{};
+        return m_keyList[0];
+    }
+
+    /// All addresses
+    const std::vector<MiniData>& allAddresses() const { return m_keyList; }
+
 private:
     static std::string addrKey(const MiniData& d) {
         const auto& b = d.bytes();

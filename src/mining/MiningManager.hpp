@@ -91,6 +91,14 @@ public:
         log("Tip changed — rebuilding template.");
     }
 
+    // Set a pre-built template (from TxPoWGenerator) as the next block to mine
+    void setNextBlock(const TxPoW& tmpl) {
+        std::lock_guard<std::mutex> lock(nextBlockMu_);
+        m_nextBlock = tmpl;
+        m_hasNextBlock = true;
+        tipChanged_ = true; // trigger template rebuild in mine loop
+    }
+
     // Stats
     uint64_t totalHashes()  const { return totalHashes_; }
     uint64_t blocksFound()  const { return blocksFound_; }
@@ -108,6 +116,9 @@ private:
     std::atomic<uint64_t>  blocksFound_{0};
 
     OnMinedCallback        onMined_;
+    std::mutex             nextBlockMu_;
+    TxPoW                  m_nextBlock;
+    bool                   m_hasNextBlock{false};
     std::function<void(const std::string&)> logger_;
 
     // ── mining loop ───────────────────────────────────────────────────────
@@ -161,6 +172,14 @@ private:
     // ── template builder ──────────────────────────────────────────────────
 
     TxPoW buildTemplate() {
+        // If TxPoWGenerator provided a template, use it
+        {
+            std::lock_guard<std::mutex> lock(nextBlockMu_);
+            if (m_hasNextBlock) {
+                m_hasNextBlock = false;
+                return m_nextBlock;
+            }
+        }
         TxPoW tmpl;
 
         int64_t currentHeight = chain_.getHeight();

@@ -36,3 +36,5 @@ add_minima_test(test_wots         crypto/test_wots.cpp)
 add_minima_test(test_treekey      crypto/test_treekey.cpp)
 add_minima_test(test_database   database/test_database.cpp)
 add_minima_test(test_processor system/test_processor.cpp)
+
+add_minima_test(test_integration  integration/test_integration.cpp)

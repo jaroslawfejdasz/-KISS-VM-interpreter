@@ -60,7 +60,9 @@ inline std::string to_string(ProcessResult r) {
 
 class TxPoWProcessor : public MessageProcessor {
 public:
-    using ResultCallback = std::function<void(const MiniData& id, ProcessResult)>;
+    using ResultCallback  = std::function<void(const MiniData& id, ProcessResult)>;
+    using BlockCallback   = std::function<void(const TxPoW&)>;
+    using TxCallback      = std::function<void(const TxPoW&)>;
 
     explicit TxPoWProcessor(MinimaDB& db)
         : MessageProcessor("TxPoWProcessor")
@@ -94,6 +96,10 @@ public:
             }
         });
     }
+
+    // ── Event callbacks ───────────────────────────────────────────────────
+    void onBlockAccepted(BlockCallback cb) { m_onBlock = std::move(cb); }
+    void onTxAccepted(TxCallback cb)       { m_onTx    = std::move(cb); }
 
     // ── Stats ──────────────────────────────────────────────────────────────
     int64_t blocksProcessed() const { return m_blocksProcessed; }
@@ -148,6 +154,7 @@ private:
         }
 
         ++m_blocksProcessed;
+        if (m_onBlock) m_onBlock(txpow);
 
         // Aktualizuj MMR jeśli to nowy tip
         // (pełna implementacja wymaga MMR rebuild po reorg)
@@ -168,6 +175,7 @@ private:
 
         m_db.mempool().add(txpow);
         ++m_txnsProcessed;
+        if (m_onTx) m_onTx(txpow);
         return ProcessResult::ACCEPTED;
     }
 
@@ -207,6 +215,8 @@ private:
         // wymagałoby pełnego MMRSet + reorg handling
     }
 
+    BlockCallback   m_onBlock;
+    TxCallback      m_onTx;
     MinimaDB&       m_db;
     TxPoWSearcher   m_searcher;
     std::atomic<int64_t> m_blocksProcessed;
