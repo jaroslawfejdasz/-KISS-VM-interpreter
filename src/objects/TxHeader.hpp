@@ -51,7 +51,7 @@ public:
     std::vector<uint8_t> serialise() const;
     static TxHeader      deserialise(const uint8_t* data, size_t& offset);
     static TxHeader      deserialise(const std::vector<uint8_t>& data, size_t& offset) {
-        size_t off = 0; return deserialise(data.data(), off);
+        return deserialise(data.data(), offset);
     }
 };
 
