@@ -1,6 +1,6 @@
 {
   "name": "minima-contracts",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "files": [
     "dist",
     "README.md",
@@ -34,5 +34,6 @@
   "bugs": {
     "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter/issues"
   },
-  "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme"
+  "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme",
+  "author": "Jaroslaw Fejdasz"
 }

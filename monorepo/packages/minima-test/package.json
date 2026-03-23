@@ -1,42 +1,35 @@
 {
   "name": "minima-test",
-  "version": "0.1.0",
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "description": "Testing framework for Minima KISS VM smart contracts and MiniDapps",
+  "version": "1.0.0",
+  "description": "Testing framework for Minima KISS VM smart contracts",
+  "keywords": ["minima", "blockchain", "kissvm", "testing", "smart-contracts"],
+  "author": "Jaroslaw Fejdasz",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter.git",
+    "directory": "monorepo/packages/minima-test"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "minima-test": "dist/cli/index.js"
+    "minima-test": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "build": "./node_modules/.bin/tsc",
-    "test": "node dist/cli/index.js run tests/",
-    "dev": "tsc --watch",
+    "build": "tsc",
+    "test": "node run-tests.js",
     "prepublishOnly": "npm run build && npm test"
   },
-  "keywords": [
-    "minima",
-    "blockchain",
-    "kissvm",
-    "testing",
-    "smart-contracts"
-  ],
-  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
-    "@types/node": "^20.19.37",
-    "typescript": "5.4"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter",
-    "directory": "packages/"
-  },
-  "bugs": {
-    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter/issues"
-  },
-  "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme"
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
 }

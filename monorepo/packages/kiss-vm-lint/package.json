@@ -1,6 +1,6 @@
 {
   "name": "kiss-vm-lint",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Static analyzer and linter for Minima KISS VM smart contract scripts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,7 +25,7 @@
     "smart-contracts",
     "static-analysis"
   ],
-  "author": "",
+  "author": "Jaroslaw Fejdasz",
   "license": "MIT",
   "engines": {
     "node": ">=14"

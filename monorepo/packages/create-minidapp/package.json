@@ -36,5 +36,6 @@
     "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter/issues"
   },
   "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme",
-  "types": "dist/index.d.ts"
+  "types": "dist/index.d.ts",
+  "author": "Jaroslaw Fejdasz"
 }
