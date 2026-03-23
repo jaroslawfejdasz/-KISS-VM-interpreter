@@ -396,6 +396,14 @@ export class KissVMInterpreter {
       const stmtKeywords = new Set(['LET','IF','THEN','ELSE','ELSEIF','ENDIF','WHILE','DO','ENDWHILE','RETURN','ASSERT','EXEC','MAST','AND','OR','NOT','XOR','NAND','NOR','EQ','NEQ','LT','GT','LTE','GTE']);
       if (!stmtKeywords.has(kw)) {
         this.advance();
+        // EXISTS requires lazy argument evaluation (don't resolve the variable)
+        if (kw === 'EXISTS') {
+          this.expect('LPAREN');
+          const argTok = this.advance(); // raw VARIABLE or KEYWORD token
+          this.expect('RPAREN');
+          const varName = argTok.value.toUpperCase();
+          return MiniValue.boolean(this.env.hasVariable(varName));
+        }
         // Parse args
         this.expect('LPAREN');
         const args: MiniValue[] = [];
