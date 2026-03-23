@@ -4,10 +4,13 @@
  *
  * Java ref: NIOMessage.java (org.minima.system.network.minima)
  *
- * Wire format for each message:
- *   [1 byte: msgType] [payload bytes...]
+ * Wire format for each message on the TCP stream:
+ *   [4 bytes big-endian: payload length] [1 byte: msgType] [payload bytes...]
  *
- * Payload encoding uses DataStream (MiniData write/read conventions).
+ * NIOMsg::encode() returns ONLY [1-byte type][body] — the length prefix
+ * is added by NIOClient::sendFramed().
+ * NIOMsg::decode() expects ONLY [1-byte type][body] — length has already
+ * been read by NIOClient::receive().
  */
 #include "../serialization/DataStream.hpp"
 #include "../objects/TxPoW.hpp"
@@ -89,32 +92,26 @@ struct NIOMsg {
     NIOMsg(MsgType t, std::vector<uint8_t> p)
         : type(t), payload(std::move(p)) {}
 
-    // Serialise: [4-byte big-endian total length][1-byte type][payload]
-    // Length field includes type byte + payload (not the length field itself)
+    /**
+     * Encode to [1-byte type][payload].
+     * The 4-byte length prefix is added by NIOClient::sendFramed().
+     */
     std::vector<uint8_t> encode() const {
-        uint32_t len = (uint32_t)(1 + payload.size());
         std::vector<uint8_t> out;
-        out.reserve(4 + 1 + payload.size());
-        // 4-byte big-endian length
-        out.push_back((uint8_t)((len >> 24) & 0xFF));
-        out.push_back((uint8_t)((len >> 16) & 0xFF));
-        out.push_back((uint8_t)((len >> 8)  & 0xFF));
-        out.push_back((uint8_t)( len        & 0xFF));
-        // type
-        out.push_back((uint8_t)type);
-        // payload
+        out.reserve(1 + payload.size());
+        out.push_back(static_cast<uint8_t>(type));
         out.insert(out.end(), payload.begin(), payload.end());
         return out;
     }
 
-    // Decode from raw bytes (includes 4-byte length header)
+    /**
+     * Decode from [1-byte type][payload].
+     * Caller has already read and consumed the 4-byte length prefix.
+     */
     static NIOMsg decode(const uint8_t* data, size_t size) {
-        if (size < 5) throw std::runtime_error("NIOMsg: too short");
-        uint32_t len = ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16)
-                     | ((uint32_t)data[2] << 8)  |  (uint32_t)data[3];
-        if (size < 4 + len) throw std::runtime_error("NIOMsg: incomplete");
-        MsgType t = (MsgType)data[4];
-        std::vector<uint8_t> p(data + 5, data + 4 + len);
+        if (size < 1) throw std::runtime_error("NIOMsg: empty message");
+        MsgType t = static_cast<MsgType>(data[0]);
+        std::vector<uint8_t> p(data + 1, data + size);
         return NIOMsg(t, std::move(p));
     }
 };

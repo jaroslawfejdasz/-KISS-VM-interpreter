@@ -367,7 +367,8 @@ TEST_SUITE("LiveNode_NIO") {
         CHECK(g2.topBlock().getAsLong() == 42);
         CHECK(g2.chain().size() == 2);
         CHECK(g2.chain()[0].bytes() == std::vector<uint8_t>(32, 0xAB));
+        CHECK(g2.extraData().str() == "{}");
         CHECK(offset == bytes.size());
-        std::cout << "[Wire] Greeting round-trip OK, " << bytes.size() << " bytes\n";
+        std::cout << "[Wire] Greeting round-trip OK, " << bytes.size() << " bytes (includes extraData)\n";
     }
 }

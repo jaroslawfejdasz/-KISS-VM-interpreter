@@ -14,19 +14,29 @@ MiniString MiniString::subset(size_t start, size_t len) const {
 }
 
 std::vector<uint8_t> MiniString::serialise() const {
-    // 2-byte length + UTF-8 bytes
-    if (m_value.size() > 65535) throw std::runtime_error("MiniString too long");
-    uint16_t len = (uint16_t)m_value.size();
+    // Java: MiniData(getData()).writeDataStream(out)
+    // MiniData.writeDataStream: [4-byte BE int: length][raw bytes]
+    if (m_value.size() > 0x0FFFFFFF)
+        throw std::runtime_error("MiniString too long");
+    uint32_t len = static_cast<uint32_t>(m_value.size());
     std::vector<uint8_t> out;
-    out.push_back((len >> 8) & 0xff);
-    out.push_back(len & 0xff);
-    for (char c : m_value) out.push_back((uint8_t)c);
+    out.push_back((len >> 24) & 0xFF);
+    out.push_back((len >> 16) & 0xFF);
+    out.push_back((len >>  8) & 0xFF);
+    out.push_back( len        & 0xFF);
+    for (char c : m_value) out.push_back(static_cast<uint8_t>(c));
     return out;
 }
 
 MiniString MiniString::deserialise(const uint8_t* data, size_t& offset) {
-    uint16_t len = ((uint16_t)data[offset] << 8) | data[offset+1];
-    offset += 2;
+    // Java: MiniData.readDataStream -> readInt (4 bytes), then readFully
+    uint32_t len = (static_cast<uint32_t>(data[offset])   << 24) |
+                   (static_cast<uint32_t>(data[offset+1]) << 16) |
+                   (static_cast<uint32_t>(data[offset+2]) <<  8) |
+                    static_cast<uint32_t>(data[offset+3]);
+    offset += 4;
+    if (len > 0x0FFFFFFF)
+        throw std::runtime_error("MiniString::deserialise: length too large");
     std::string s(reinterpret_cast<const char*>(data + offset), len);
     offset += len;
     return MiniString(s);
