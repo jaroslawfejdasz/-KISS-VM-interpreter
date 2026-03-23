@@ -529,3 +529,195 @@ TEST_SUITE("TxPoWValidator - Full Pipeline") {
         CHECK(r.valid);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TEST SUITE 6 — WOTS Signature validation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#include "../../src/crypto/Schnorr.hpp"
+#include "../../src/crypto/Winternitz.hpp"
+
+TEST_SUITE("TxPoWValidator - WOTS Signatures") {
+
+    // Helper: build valid WOTS keypair + signature for a given TxPoW ID
+    static auto makeWOTSSig(const MiniData& txpowID) {
+        using namespace minima::crypto;
+        std::vector<uint8_t> seed(32);
+        for (int i = 0; i < 32; ++i) seed[i] = static_cast<uint8_t>(i * 7 + 3);
+
+        auto pubkeyBytes = Winternitz::generatePublicKey(seed);
+        MiniData pubkey(pubkeyBytes);
+
+        MiniData msgHash = Hash::sha3_256(txpowID.bytes().data(), txpowID.bytes().size());
+        MiniData sig = Schnorr::sign(MiniData(seed), msgHash);
+
+        return std::make_tuple(pubkey, sig, msgHash);
+    }
+
+    TEST_CASE("Empty witness (no signatures) always passes") {
+        MockUTxO utxo;
+        TxPoWValidator v(utxo.lookup());
+        TxPoW txpow = buildTestTxPoW(Transaction{}, Witness{});
+        auto r = v.checkSignatures(txpow);
+        CHECK(r.valid);
+    }
+
+    TEST_CASE("Valid WOTS signature passes checkSignatures") {
+        TxPoW txpow = buildTestTxPoW(Transaction{}, Witness{});
+        MiniData txpowID = txpow.computeID();
+
+        auto [pubkey, sig, msg] = makeWOTSSig(txpowID);
+
+        SignatureProof sp;
+        sp.mPublicKey = pubkey;
+        sp.mSignature = sig;
+        Signature sigGroup;
+        sigGroup.addSignatureProof(sp);
+
+        Witness witness;
+        witness.addSignature(sigGroup);
+
+        MockUTxO utxo;
+        TxPoWValidator v(utxo.lookup());
+        // Note: ID is derived from header only — witness doesn't affect it
+        auto r = v.checkSignatures(buildTestTxPoW(Transaction{}, witness));
+        CHECK(r.valid);
+        CHECK(r.error.empty());
+    }
+
+    TEST_CASE("Invalid WOTS signature (corrupted) fails") {
+        TxPoW txpow = buildTestTxPoW(Transaction{}, Witness{});
+        MiniData txpowID = txpow.computeID();
+
+        auto [pubkey, sig, msg] = makeWOTSSig(txpowID);
+
+        // Corrupt first byte of signature
+        auto sigBytes = sig.bytes();
+        sigBytes[0] ^= 0xFF;
+        MiniData badSig(sigBytes);
+
+        SignatureProof sp;
+        sp.mPublicKey = pubkey;
+        sp.mSignature = badSig;
+        Signature sigGroup;
+        sigGroup.addSignatureProof(sp);
+
+        Witness witness;
+        witness.addSignature(sigGroup);
+
+        MockUTxO utxo;
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkSignatures(buildTestTxPoW(Transaction{}, witness));
+        CHECK_FALSE(r.valid);
+        CHECK(r.error.find("WOTS verification failed") != std::string::npos);
+    }
+
+    TEST_CASE("Wrong public key size fails") {
+        Witness witness;
+        SignatureProof sp;
+        sp.mPublicKey = MiniData(std::vector<uint8_t>(64, 0xAB));  // too small
+        sp.mSignature = MiniData(std::vector<uint8_t>(crypto::Winternitz::SIG_SIZE, 0x00));
+        Signature sigGroup;
+        sigGroup.addSignatureProof(sp);
+        witness.addSignature(sigGroup);
+
+        MockUTxO utxo;
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkSignatures(buildTestTxPoW(Transaction{}, witness));
+        CHECK_FALSE(r.valid);
+        CHECK(r.error.find("wrong public key size") != std::string::npos);
+    }
+
+    TEST_CASE("Wrong signature size fails") {
+        Witness witness;
+        SignatureProof sp;
+        sp.mPublicKey = MiniData(std::vector<uint8_t>(crypto::Winternitz::PUBKEY_SIZE, 0xAB));
+        sp.mSignature = MiniData(std::vector<uint8_t>(64, 0x00));  // too small
+        Signature sigGroup;
+        sigGroup.addSignatureProof(sp);
+        witness.addSignature(sigGroup);
+
+        MockUTxO utxo;
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkSignatures(buildTestTxPoW(Transaction{}, witness));
+        CHECK_FALSE(r.valid);
+        CHECK(r.error.find("wrong signature size") != std::string::npos);
+    }
+
+    TEST_CASE("Multiple valid signatures (multi-signer) all pass") {
+        TxPoW txpow = buildTestTxPoW(Transaction{}, Witness{});
+        MiniData txpowID = txpow.computeID();
+
+        Witness witness;
+        for (int signer = 0; signer < 2; ++signer) {
+            std::vector<uint8_t> seed(32);
+            for (int i = 0; i < 32; ++i) seed[i] = static_cast<uint8_t>(signer * 100 + i);
+
+            auto pubkeyBytes = crypto::Winternitz::generatePublicKey(seed);
+            MiniData pubkey(pubkeyBytes);
+            MiniData msgHash = crypto::Hash::sha3_256(
+                txpowID.bytes().data(), txpowID.bytes().size());
+            MiniData sig = crypto::Schnorr::sign(MiniData(seed), msgHash);
+
+            SignatureProof sp;
+            sp.mPublicKey = pubkey;
+            sp.mSignature = sig;
+            Signature sigGroup;
+            sigGroup.addSignatureProof(sp);
+            witness.addSignature(sigGroup);
+        }
+
+        MockUTxO utxo;
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkSignatures(buildTestTxPoW(Transaction{}, witness));
+        CHECK(r.valid);
+    }
+
+    TEST_CASE("Signature for wrong TxPoW ID fails") {
+        MiniData wrongID = MiniData::fromHex(
+            "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF");
+
+        auto [pubkey, sig, msg] = makeWOTSSig(wrongID);
+
+        SignatureProof sp;
+        sp.mPublicKey = pubkey;
+        sp.mSignature = sig;
+        Signature sigGroup;
+        sigGroup.addSignatureProof(sp);
+
+        Witness witness;
+        witness.addSignature(sigGroup);
+
+        // This TxPoW has a different ID than wrongID → verify must fail
+        MockUTxO utxo;
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkSignatures(buildTestTxPoW(Transaction{}, witness));
+        CHECK_FALSE(r.valid);
+    }
+
+    TEST_CASE("Empty SignatureProof slots skipped (multi-sig placeholders)") {
+        TxPoW txpow = buildTestTxPoW(Transaction{}, Witness{});
+        MiniData txpowID = txpow.computeID();
+
+        Witness witness;
+        {
+            std::vector<uint8_t> seed(32, 0x42);
+            auto pubkeyBytes = crypto::Winternitz::generatePublicKey(seed);
+            MiniData pubkey(pubkeyBytes);
+            MiniData msgHash = crypto::Hash::sha3_256(
+                txpowID.bytes().data(), txpowID.bytes().size());
+            MiniData sig = crypto::Schnorr::sign(MiniData(seed), msgHash);
+
+            Signature sigGroup;
+            SignatureProof sp1; sp1.mPublicKey = pubkey; sp1.mSignature = sig;
+            sigGroup.addSignatureProof(sp1);
+            sigGroup.addSignatureProof(SignatureProof{});  // empty placeholder
+            witness.addSignature(sigGroup);
+        }
+
+        MockUTxO utxo;
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkSignatures(buildTestTxPoW(Transaction{}, witness));
+        CHECK(r.valid);
+    }
+}

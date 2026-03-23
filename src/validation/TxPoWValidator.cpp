@@ -4,16 +4,18 @@
  * Implements:
  *  1. PoW check        — header hash meets txnDifficulty
  *  2. Script execution — all input coin scripts return TRUE via KISS VM
- *  3. Balance check    — sum(inputs) >= sum(outputs)
- *  4. CoinID check     — output coin IDs correctly derived
- *  5. State vars check — state variables within bounds
- *  6. Size check       — TxPoW within desiredBlockSize
+ *  3. Signature check  — all WOTS signatures in Witness are valid
+ *  4. Balance check    — sum(inputs) >= sum(outputs)
+ *  5. CoinID check     — output coin IDs correctly derived
+ *  6. State vars check — state variables within bounds
+ *  7. Size check       — TxPoW within desiredBlockSize
  */
 
 #include "TxPoWValidator.hpp"
 #include "../kissvm/Contract.hpp"
 #include "../crypto/Hash.hpp"
 #include "../crypto/Schnorr.hpp"
+#include "../crypto/Winternitz.hpp"
 #include "../objects/Address.hpp"
 #include "../objects/Transaction.hpp"
 #include "../objects/Witness.hpp"
@@ -36,6 +38,7 @@ ValidationResult TxPoWValidator::validate(const TxPoW& txpow) const {
     r       = checkStateVars(txpow);   if (!r.valid) return r;
     r       = checkBalance(txpow);     if (!r.valid) return r;
     r       = checkCoinIDs(txpow);     if (!r.valid) return r;
+    r       = checkSignatures(txpow);  if (!r.valid) return r;
     r       = checkScripts(txpow);     if (!r.valid) return r;
     return ValidationResult::ok();
 }
@@ -43,24 +46,13 @@ ValidationResult TxPoWValidator::validate(const TxPoW& txpow) const {
 // ── 1. PoW check ─────────────────────────────────────────────────────────────
 
 ValidationResult TxPoWValidator::checkPoW(const TxPoW& txpow) const {
-    // TxPoW ID = SHA3(SHA3(header_bytes))
     MiniData txpowID = txpow.computeID();
 
-    // Convert ID to a number for comparison with txnDifficulty
-    // In Minima: PoW score = numeric value of txpow hash (bigger = more work)
-    // Minimum PoW: txpowID value >= txnDifficulty threshold
-    // For now we check non-zero ID (full difficulty comparison requires BigInteger)
     if (txpowID.bytes().empty()) {
         return ValidationResult::fail("PoW check: null TxPoW ID");
     }
 
-    // Check difficulty: all bytes of ID should be zero up to difficulty level
-    // Simplified check: first byte must be 0 for any valid TxPoW
-    // (Full implementation needs MiniNumber comparison of 256-bit values)
-    const auto& idBytes = txpowID.bytes();
     const MiniData& minWork = txpow.body().txnDifficulty;
-
-    // If txnDifficulty is all 0xFF (test mode / max), skip PoW check
     const auto& diffBytes = minWork.bytes();
     bool isMaxDiff = diffBytes.empty() ||
         std::all_of(diffBytes.begin(), diffBytes.end(), [](uint8_t b){ return b == 0xFF; });
@@ -68,8 +60,7 @@ ValidationResult TxPoWValidator::checkPoW(const TxPoW& txpow) const {
         return ValidationResult::ok();
     }
 
-    // PoW check: TxPoW hash must be <= txnDifficulty (big-endian comparison)
-    // Approximate: first byte of hash must be <= first byte of difficulty
+    const auto& idBytes = txpowID.bytes();
     if (!idBytes.empty() && !diffBytes.empty() && idBytes[0] > diffBytes[0]) {
         return ValidationResult::fail("PoW check: insufficient proof-of-work");
     }
@@ -77,7 +68,80 @@ ValidationResult TxPoWValidator::checkPoW(const TxPoW& txpow) const {
     return ValidationResult::ok();
 }
 
-// ── 2. Script execution ───────────────────────────────────────────────────────
+// ── 2. WOTS Signature check ───────────────────────────────────────────────────
+//
+// Java reference: TxPoWChecker.java checkTransactionSignatures()
+//
+// For each Signature in Witness.mSignatureProofs:
+//   for each SignatureProof sp in Signature:
+//     1. msg = SHA3-256(txpow.computeID().bytes())
+//     2. Winternitz::verify(sp.mPublicKey, msg, sp.mSignature)
+//
+// Rules:
+//  - Empty witness → allowed (pure script contracts like time locks)
+//  - Each SignatureProof must have PUBKEY_SIZE (2880) pubkey and SIG_SIZE (2880) sig
+//  - WOTS verify must pass
+
+ValidationResult TxPoWValidator::checkSignatures(const TxPoW& txpow) const {
+    const Witness& witness = txpow.body().witness;
+
+    if (witness.signatures().empty()) {
+        return ValidationResult::ok();
+    }
+
+    // Message = SHA3-256(TxPoW ID)
+    // Java: Crypto.getInstance().hashData(txpow.getTransactionID())
+    MiniData txpowID  = txpow.computeID();
+    MiniData msgHash  = crypto::Hash::sha3_256(
+        txpowID.bytes().data(), txpowID.bytes().size());
+
+    size_t sigIndex = 0;
+    for (const auto& sigGroup : witness.signatures()) {
+        for (const auto& sp : sigGroup.mSignatures) {
+            // Skip empty/placeholder proofs (multi-sig where one slot is blank)
+            if (sp.mPublicKey.empty() || sp.mSignature.empty()) {
+                ++sigIndex;
+                continue;
+            }
+
+            // Validate key sizes
+            if (sp.mPublicKey.bytes().size() !=
+                    static_cast<size_t>(crypto::Winternitz::PUBKEY_SIZE)) {
+                std::ostringstream oss;
+                oss << "Signature check: SignatureProof[" << sigIndex
+                    << "] has wrong public key size ("
+                    << sp.mPublicKey.bytes().size()
+                    << " != " << crypto::Winternitz::PUBKEY_SIZE << ")";
+                return ValidationResult::fail(oss.str());
+            }
+
+            if (sp.mSignature.bytes().size() !=
+                    static_cast<size_t>(crypto::Winternitz::SIG_SIZE)) {
+                std::ostringstream oss;
+                oss << "Signature check: SignatureProof[" << sigIndex
+                    << "] has wrong signature size ("
+                    << sp.mSignature.bytes().size()
+                    << " != " << crypto::Winternitz::SIG_SIZE << ")";
+                return ValidationResult::fail(oss.str());
+            }
+
+            // WOTS verify: recover pubkey from sig+msg and compare
+            bool ok = crypto::Schnorr::verify(sp.mPublicKey, msgHash, sp.mSignature);
+            if (!ok) {
+                std::ostringstream oss;
+                oss << "Signature check: WOTS verification failed for SignatureProof["
+                    << sigIndex << "]";
+                return ValidationResult::fail(oss.str());
+            }
+
+            ++sigIndex;
+        }
+    }
+
+    return ValidationResult::ok();
+}
+
+// ── 3. Script execution ───────────────────────────────────────────────────────
 
 ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
     const Transaction& txn     = txpow.body().txn;
@@ -87,7 +151,6 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
     for (size_t i = 0; i < inputs.size(); ++i) {
         const Coin& inputCoin = inputs[i];
 
-        // Resolve coin from UTxO set
         const Coin* utxoCoin = m_coinLookup(inputCoin.coinID());
         if (!utxoCoin) {
             std::ostringstream oss;
@@ -95,7 +158,6 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
             return ValidationResult::fail(oss.str());
         }
 
-        // Get the script for this coin's address
         auto scriptOpt = witness.scriptForAddress(utxoCoin->address().hash());
         if (!scriptOpt.has_value()) {
             std::ostringstream oss;
@@ -106,9 +168,7 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
 
         const std::string& script = scriptOpt->str();
 
-        // Verify script hash matches coin address.
-        // Java: MMRData.CreateMMRDataLeafNode(MiniString(script), ZERO).getData()
-        //   = SHA3(MiniString.writeDataStream()) = SHA3(2-byte-len + utf8-bytes)
+        // Verify script hash matches coin address (wire-exact)
         MiniString ms(script);
         auto msBytes = ms.serialise();
         MiniData scriptHash = crypto::Hash::sha3_256(msBytes.data(), msBytes.size());
@@ -121,12 +181,7 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
         // Execute KISS VM contract
         try {
             kissvm::Contract contract(script, txn, witness, i);
-
-            // Inject context
             contract.setBlockNumber(txpow.header().blockNumber);
-
-            // Coin age: blockNumber - coin_creation_block
-            // We don't have creation block here, use 0 (can be enhanced with MMR)
             contract.setCoinAge(MiniNumber::ZERO);
 
             kissvm::Value result = contract.execute();
@@ -151,19 +206,18 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
     return ValidationResult::ok();
 }
 
-// ── 3. Balance check ─────────────────────────────────────────────────────────
+// ── 4. Balance check ─────────────────────────────────────────────────────────
 
 ValidationResult TxPoWValidator::checkBalance(const TxPoW& txpow) const {
     const Transaction& txn = txpow.body().txn;
 
-    // Sum native Minima inputs (skip tokens — each token has its own balance)
     MiniNumber inputSum  = MiniNumber::ZERO;
     MiniNumber outputSum = MiniNumber::ZERO;
 
     for (const auto& coin : txn.inputs()) {
         if (!coin.hasToken()) {
             const Coin* utxo = m_coinLookup(coin.coinID());
-            if (!utxo) continue;  // already caught in checkScripts
+            if (!utxo) continue;
             inputSum = inputSum + utxo->amount();
         }
     }
@@ -174,17 +228,14 @@ ValidationResult TxPoWValidator::checkBalance(const TxPoW& txpow) const {
         }
     }
 
-    // inputs >= outputs (difference is the burn/fee)
     if (inputSum < outputSum) {
-        std::ostringstream oss;
-        oss << "Balance check: outputs exceed inputs";
-        return ValidationResult::fail(oss.str());
+        return ValidationResult::fail("Balance check: outputs exceed inputs");
     }
 
     return ValidationResult::ok();
 }
 
-// ── 4. CoinID check ──────────────────────────────────────────────────────────
+// ── 5. CoinID check ──────────────────────────────────────────────────────────
 
 ValidationResult TxPoWValidator::checkCoinIDs(const TxPoW& txpow) const {
     const Transaction& txn = txpow.body().txn;
@@ -193,7 +244,7 @@ ValidationResult TxPoWValidator::checkCoinIDs(const TxPoW& txpow) const {
     const auto& outputs = txn.outputs();
     for (size_t i = 0; i < outputs.size(); ++i) {
         const Coin& out = outputs[i];
-        if (out.coinID().bytes().empty()) continue;  // floating coin — ID assigned later
+        if (out.coinID().bytes().empty()) continue;
 
         MiniData expectedID = Transaction::computeCoinID(txID, static_cast<uint32_t>(i));
         if (!(out.coinID() == expectedID)) {
@@ -206,12 +257,11 @@ ValidationResult TxPoWValidator::checkCoinIDs(const TxPoW& txpow) const {
     return ValidationResult::ok();
 }
 
-// ── 5. State variables check ─────────────────────────────────────────────────
+// ── 6. State variables check ─────────────────────────────────────────────────
 
 ValidationResult TxPoWValidator::checkStateVars(const TxPoW& txpow) const {
     const Transaction& txn = txpow.body().txn;
 
-    // Port numbers must be in range 0..255
     for (const auto& sv : txn.stateVars()) {
         if (sv.port() > 255) {
             std::ostringstream oss;
@@ -221,7 +271,6 @@ ValidationResult TxPoWValidator::checkStateVars(const TxPoW& txpow) const {
         }
     }
 
-    // Check output coin state vars
     for (const auto& coin : txn.outputs()) {
         for (const auto& sv : coin.stateVars()) {
             if (sv.port() > 255) {
@@ -233,21 +282,17 @@ ValidationResult TxPoWValidator::checkStateVars(const TxPoW& txpow) const {
     return ValidationResult::ok();
 }
 
-// ── 6. Size check ────────────────────────────────────────────────────────────
+// ── 7. Size check ────────────────────────────────────────────────────────────
 
 ValidationResult TxPoWValidator::checkSize(const TxPoW& txpow) const {
     auto bytes = txpow.serialise();
     size_t size = bytes.size();
 
-    // desiredBlockSize = magic number for max TxPoW size
-    // If not set (zero), skip check
     const MiniNumber& maxSize = txpow.header().magic.desiredMaxTxPoWSize;
     if (maxSize == MiniNumber::ZERO) {
         return ValidationResult::ok();
     }
 
-    // Convert maxSize to uint64_t for comparison
-    // MiniNumber stores as decimal string — parse it
     try {
         uint64_t maxBytes = static_cast<uint64_t>(std::stoull(maxSize.toString()));
         if (size > maxBytes) {

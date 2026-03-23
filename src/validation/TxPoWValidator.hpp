@@ -5,10 +5,11 @@
  * Responsible for:
  *  1. PoW check        — hash meets minimum difficulty
  *  2. Script execution — all input coin scripts return TRUE
- *  3. Balance check    — sum(inputs) >= sum(outputs) + burn
- *  4. CoinID check     — output coin IDs are correctly derived
- *  5. State checks     — state variables are well-formed
- *  6. Size check       — TxPoW within magic number limits
+ *  3. Signature check  — all WOTS signatures in Witness are valid
+ *  4. Balance check    — sum(inputs) >= sum(outputs) + burn
+ *  5. CoinID check     — output coin IDs are correctly derived
+ *  6. State checks     — state variables are well-formed
+ *  7. Size check       — TxPoW within magic number limits
  *
  * Chain-level validation (MMR proofs, block ordering) is out of scope here —
  * that belongs in a higher-level ChainProcessor module.
@@ -46,6 +47,7 @@ public:
 
     // Individual checks (useful for unit testing)
     ValidationResult checkPoW         (const TxPoW& txpow) const;
+    ValidationResult checkSignatures  (const TxPoW& txpow) const;
     ValidationResult checkScripts     (const TxPoW& txpow) const;
     ValidationResult checkBalance     (const TxPoW& txpow) const;
     ValidationResult checkCoinIDs     (const TxPoW& txpow) const;
