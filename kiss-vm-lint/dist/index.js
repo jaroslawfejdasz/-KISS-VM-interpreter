@@ -1,0 +1,91 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.rules = exports.ALL_RULES = void 0;
+exports.lint = lint;
+exports.analyze = lint;
+exports.lintOrThrow = lintOrThrow;
+const tokenizer_1 = require("./tokenizer");
+const rules_1 = require("./rules");
+/**
+ * Rough instruction count estimate — counts statement keywords.
+ * Used for early detection of scripts approaching the 1024 limit.
+ */
+function estimateInstructions(script) {
+    const stmtKeywords = /\b(LET|IF|WHILE|RETURN|ASSERT|EXEC|MAST)\b/gi;
+    return (script.match(stmtKeywords) ?? []).length;
+}
+function lint(script, options = {}) {
+    const rules = options.rules ?? rules_1.ALL_RULES;
+    const ignore = new Set(options.ignoreRules ?? []);
+    const { tokens, errors: tokenErrors } = (0, tokenizer_1.tokenize)(script);
+    const all = [...tokenErrors];
+    for (const rule of rules) {
+        const ruleErrors = rule(tokens, script);
+        all.push(...ruleErrors);
+    }
+    const filtered = all.filter(e => !ignore.has(e.code));
+    const errors = filtered.filter(e => e.severity === 'error');
+    const warnings = filtered.filter(e => e.severity === 'warning');
+    const infos = filtered.filter(e => e.severity === 'info');
+    const summary = {
+        errors: errors.length,
+        warnings: warnings.length,
+        infos: infos.length,
+        total: filtered.length,
+        instructionEstimate: estimateInstructions(script),
+    };
+    return {
+        errors,
+        warnings,
+        infos,
+        all: filtered,
+        hasErrors: errors.length > 0,
+        script,
+        summary,
+    };
+}
+function lintOrThrow(script, options) {
+    const result = lint(script, options);
+    if (result.hasErrors) {
+        const msgs = result.errors.map(e => `[${e.code}] ${e.message}`).join('\n');
+        throw new Error(`KISS VM lint errors:\n${msgs}`);
+    }
+    return result;
+}
+var rules_2 = require("./rules");
+Object.defineProperty(exports, "ALL_RULES", { enumerable: true, get: function () { return rules_2.ALL_RULES; } });
+exports.rules = __importStar(require("./rules"));
+//# sourceMappingURL=index.js.map

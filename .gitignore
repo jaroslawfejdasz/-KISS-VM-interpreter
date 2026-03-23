@@ -1,33 +1,23 @@
-# C++ build artifacts
-build/
-build-*/
-*.o
-*.a
-*.so
-*.dylib
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-Makefile
-CTestTestfile.cmake
-_deps/
-
-# Agent runtime files (secrets)
-.agents/
-
-# Node.js / monorepo
-monorepo/node_modules/
-monorepo/packages/*/node_modules/
-monorepo/packages/*/dist/
-monorepo/package-lock.json
+# Dependencies
 node_modules/
-*.log
+*/node_modules/
 
-# macOS
+# Build artifacts - NOT ignored (dist/ is committed so users can clone and use)
+# dist/ is included
+
+# OS
 .DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
 .idea/
-*.swp
+
+# npm pack artifacts
+*.tgz
+
+# env files
+.env
+.env.local
 .agents/
+.agents/.env

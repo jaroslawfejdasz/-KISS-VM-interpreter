@@ -1,0 +1,36 @@
+{
+  "name": "minima-test",
+  "version": "0.1.0",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "description": "Testing framework for Minima KISS VM smart contracts and MiniDapps",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "minima-test": "dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node dist/cli/index.js run tests/",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "minima",
+    "blockchain",
+    "kissvm",
+    "testing",
+    "smart-contracts"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minima-global/developer-toolkit"
+  }
+}

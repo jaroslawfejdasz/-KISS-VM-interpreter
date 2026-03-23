@@ -1,4 +1,4 @@
-const { describe, it, expect, runScript, defaultTransaction } = require('../dist/api');
+const { describe, it, expect, runScript, MiniValue, defaultTransaction } = require('../dist/api');
 
 describe('Smart Contract Patterns', () => {
 
@@ -31,6 +31,8 @@ describe('Smart Contract Patterns', () => {
   // ---- TIME LOCK ----
   describe('Time Lock Contract', () => {
     const lockUntilBlock = 2000;
+
+    // Script: only spendable after block 2000
     const timeLockScript = `RETURN @BLOCK GTE ${lockUntilBlock}`;
 
     it('fails before lock expires', () => {
@@ -54,6 +56,7 @@ describe('Smart Contract Patterns', () => {
 
   // ---- COINAGE LOCK ----
   describe('Coin Age Lock (HODLer)', () => {
+    // Coin must be at least 500 blocks old before spending
     const minAge = 500;
     const script = `RETURN @COINAGE GTE ${minAge}`;
 
@@ -63,7 +66,7 @@ describe('Smart Contract Patterns', () => {
           blockNumber: 1100,
           inputs: [{ coinId: '0x01', address: '0x01', amount: 100, tokenId: '0x00', blockCreated: 1000 }]
         }
-      })).toFail();
+      })).toFail(); // coinage = 100
     });
 
     it('passes when coin is old enough', () => {
@@ -72,12 +75,14 @@ describe('Smart Contract Patterns', () => {
           blockNumber: 2000,
           inputs: [{ coinId: '0x01', address: '0x01', amount: 100, tokenId: '0x00', blockCreated: 1000 }]
         }
-      })).toPass();
+      })).toPass(); // coinage = 1000
     });
   });
 
   // ---- EXCHANGE CONTRACT ----
   describe('Exchange Contract (atomic swap)', () => {
+    // Alice sends Minima, gets custom token back
+    // Script: output[0] must send token back to Alice's address
     const aliceAddr = '0x1234567890abcdef';
     const tokenId   = '0xdeadbeef00000000';
     const amount    = 100;
@@ -90,9 +95,16 @@ describe('Smart Contract Patterns', () => {
     it('passes when correct token output exists', () => {
       expect(runScript(exchangeScript, {
         transaction: {
-          inputs: [{ coinId: '0xabc', address: aliceAddr, amount: 100, tokenId: '0x00', blockCreated: 1000 }],
-          outputs: [{ address: aliceAddr, amount: 100, tokenId: tokenId }],
-          blockNumber: 1100, blockTime: Date.now(), signatures: [],
+          inputs: [{
+            coinId: '0xabc', address: aliceAddr, amount: 100,
+            tokenId: '0x00', blockCreated: 1000
+          }],
+          outputs: [{
+            address: aliceAddr, amount: 100, tokenId: tokenId
+          }],
+          blockNumber: 1100,
+          blockTime: Date.now(),
+          signatures: [],
         }
       })).toPass();
     });
@@ -100,9 +112,16 @@ describe('Smart Contract Patterns', () => {
     it('fails when output has wrong amount', () => {
       expect(runScript(exchangeScript, {
         transaction: {
-          inputs: [{ coinId: '0xabc', address: aliceAddr, amount: 100, tokenId: '0x00', blockCreated: 1000 }],
-          outputs: [{ address: aliceAddr, amount: 50, tokenId: tokenId }],
-          blockNumber: 1100, blockTime: Date.now(), signatures: [],
+          inputs: [{
+            coinId: '0xabc', address: aliceAddr, amount: 100,
+            tokenId: '0x00', blockCreated: 1000
+          }],
+          outputs: [{
+            address: aliceAddr, amount: 50, tokenId: tokenId
+          }],
+          blockNumber: 1100,
+          blockTime: Date.now(),
+          signatures: [],
         }
       })).toFail();
     });
@@ -110,9 +129,16 @@ describe('Smart Contract Patterns', () => {
     it('fails when output goes to wrong address', () => {
       expect(runScript(exchangeScript, {
         transaction: {
-          inputs: [{ coinId: '0xabc', address: aliceAddr, amount: 100, tokenId: '0x00', blockCreated: 1000 }],
-          outputs: [{ address: '0xeviladdress000000', amount: 100, tokenId: tokenId }],
-          blockNumber: 1100, blockTime: Date.now(), signatures: [],
+          inputs: [{
+            coinId: '0xabc', address: aliceAddr, amount: 100,
+            tokenId: '0x00', blockCreated: 1000
+          }],
+          outputs: [{
+            address: '0xeviladdress000000', amount: 100, tokenId: tokenId
+          }],
+          blockNumber: 1100,
+          blockTime: Date.now(),
+          signatures: [],
         }
       })).toFail();
     });
@@ -122,7 +148,10 @@ describe('Smart Contract Patterns', () => {
   describe('State Variables', () => {
     it('reads state variable', () => {
       expect(runScript('LET s = STATE(0) RETURN s EQ [hello]', {
-        transaction: { ...defaultTransaction(), stateVars: { 0: 'hello' } }
+        transaction: {
+          ...defaultTransaction(),
+          stateVars: { 0: 'hello' }
+        }
       })).toPass();
     });
 
@@ -130,7 +159,7 @@ describe('Smart Contract Patterns', () => {
       expect(runScript('RETURN SAMESTATE(0, 2)', {
         transaction: {
           ...defaultTransaction(),
-          stateVars:     { 0: 'a', 1: 'b', 2: 'c' },
+          stateVars: { 0: 'a', 1: 'b', 2: 'c' },
           prevStateVars: { 0: 'a', 1: 'b', 2: 'c' }
         }
       })).toPass();
@@ -140,7 +169,7 @@ describe('Smart Contract Patterns', () => {
       expect(runScript('RETURN SAMESTATE(0, 2)', {
         transaction: {
           ...defaultTransaction(),
-          stateVars:     { 0: 'a', 1: 'CHANGED', 2: 'c' },
+          stateVars: { 0: 'a', 1: 'CHANGED', 2: 'c' },
           prevStateVars: { 0: 'a', 1: 'b', 2: 'c' }
         }
       })).toFail();

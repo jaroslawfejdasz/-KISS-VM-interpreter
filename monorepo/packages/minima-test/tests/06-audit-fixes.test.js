@@ -2,6 +2,7 @@ const { describe, it, expect, runScript, defaultTransaction } = require('../dist
 
 describe('Audit Fixes', () => {
 
+  // BUG #1: String whitespace preservation
   describe('String whitespace (BUG #1 fix)', () => {
     it('preserves internal spaces in strings', () => {
       expect(runScript('RETURN [hello world] EQ [hello world]')).toPass();
@@ -16,41 +17,66 @@ describe('Audit Fixes', () => {
     });
   });
 
+  // BUG #2: MULTISIG implementation
   describe('MULTISIG (BUG #2 fix)', () => {
     const k1 = '0xaabbccdd11223344';
     const k2 = '0xdeadbeef12345678';
     const k3 = '0x1234567890abcdef';
 
     it('1-of-2 passes with one sig', () => {
-      expect(runScript(`RETURN MULTISIG(1, ${k1}, ${k2})`, { signatures: [k1] })).toPass();
+      expect(runScript(
+        `RETURN MULTISIG(1, ${k1}, ${k2})`,
+        { signatures: [k1] }
+      )).toPass();
     });
 
     it('2-of-2 passes with both sigs', () => {
-      expect(runScript(`RETURN MULTISIG(2, ${k1}, ${k2})`, { signatures: [k1, k2] })).toPass();
+      expect(runScript(
+        `RETURN MULTISIG(2, ${k1}, ${k2})`,
+        { signatures: [k1, k2] }
+      )).toPass();
     });
 
     it('2-of-2 fails with one sig', () => {
-      expect(runScript(`RETURN MULTISIG(2, ${k1}, ${k2})`, { signatures: [k1] })).toFail();
+      expect(runScript(
+        `RETURN MULTISIG(2, ${k1}, ${k2})`,
+        { signatures: [k1] }
+      )).toFail();
     });
 
     it('2-of-3 passes with two correct sigs', () => {
-      expect(runScript(`RETURN MULTISIG(2, ${k1}, ${k2}, ${k3})`, { signatures: [k1, k3] })).toPass();
+      expect(runScript(
+        `RETURN MULTISIG(2, ${k1}, ${k2}, ${k3})`,
+        { signatures: [k1, k3] }
+      )).toPass();
     });
 
     it('2-of-3 fails with zero sigs', () => {
-      expect(runScript(`RETURN MULTISIG(2, ${k1}, ${k2}, ${k3})`, { signatures: [] })).toFail();
+      expect(runScript(
+        `RETURN MULTISIG(2, ${k1}, ${k2}, ${k3})`,
+        { signatures: [] }
+      )).toFail();
     });
 
     it('2-of-3 fails with wrong keys', () => {
-      expect(runScript(`RETURN MULTISIG(2, ${k1}, ${k2}, ${k3})`, { signatures: ['0xdeaddeaddeaddead'] })).toFail();
+      expect(runScript(
+        `RETURN MULTISIG(2, ${k1}, ${k2}, ${k3})`,
+        { signatures: ['0xdeaddeaddeaddead'] }
+      )).toFail();
     });
 
     it('MULTISIG is case-insensitive for signatures', () => {
+      // hex prefix must be lowercase 0x (Minima spec), but hex digits can be any case
+      const k1lower = '0xaabbccdd11223344';
       const k1upper = '0xAABBCCDD11223344';
-      expect(runScript(`RETURN MULTISIG(1, ${k1upper})`, { signatures: [k1] })).toPass();
+      expect(runScript(
+        `RETURN MULTISIG(1, ${k1upper})`,
+        { signatures: [k1lower] }
+      )).toPass();
     });
   });
 
+  // BUG #3: Invalid HEX literal
   describe('HEX tokenization (BUG #3 fix)', () => {
     it('rejects 0x without hex digits', () => {
       expect(runScript('RETURN 0x EQ 0x00')).toThrow();
@@ -65,6 +91,7 @@ describe('Audit Fixes', () => {
     });
   });
 
+  // Additional edge cases found during audit
   describe('Edge Cases', () => {
     it('LET without = (original Minima style)', () => {
       expect(runScript('LET x 5 RETURN x EQ 5')).toPass();
@@ -118,12 +145,16 @@ describe('Audit Fixes', () => {
   });
 });
 
+// STATE/PREVSTATE type coercion (BUG #5 fix)
 describe('STATE/PREVSTATE numeric comparison (BUG #5 fix)', () => {
   it('STATE returns numeric value for numeric state', () => {
-    expect(runScript('RETURN STATE(1) EQ 42', { state: { 1: 42 } })).toPass();
+    expect(runScript('RETURN STATE(1) EQ 42', {
+      state: { 1: 42 }
+    })).toPass();
   });
 
   it('PREVSTATE numeric comparison works correctly', () => {
+    // Was broken: "5" GT "10" was TRUE (string compare), now correctly FALSE
     expect(runScript('RETURN STATE(1) GT PREVSTATE(1)', {
       state: { 1: 5 },
       transaction: { prevStateVars: { 1: '10' } }
@@ -138,7 +169,9 @@ describe('STATE/PREVSTATE numeric comparison (BUG #5 fix)', () => {
   });
 
   it('STATE returns HEX value for 0x-prefixed state', () => {
-    expect(runScript('RETURN STATE(1) EQ 0xaabb', { state: { 1: '0xaabb' } })).toPass();
+    expect(runScript('RETURN STATE(1) EQ 0xaabb', {
+      state: { 1: '0xaabb' }
+    })).toPass();
   });
 
   it('state channel nonce replay prevention', () => {
@@ -153,16 +186,20 @@ describe('STATE/PREVSTATE numeric comparison (BUG #5 fix)', () => {
       'RETURN nonceOk AND timedOut AND signedByEither'
     ].join('\n');
 
+    // Old state (nonce 5 < prevNonce 10) → replay rejected
     expect(runScript(script, {
       state: { 1: 5 },
       transaction: { prevStateVars: { 1: '10' } },
-      signatures: ['0xaaaa'], coinAge: 2000
+      signatures: ['0xaaaa'],
+      coinAge: 2000
     })).toFail();
 
+    // Fresh state (nonce 11 > prevNonce 10) → passes
     expect(runScript(script, {
       state: { 1: 11 },
       transaction: { prevStateVars: { 1: '10' } },
-      signatures: ['0xaaaa'], coinAge: 2000
+      signatures: ['0xaaaa'],
+      coinAge: 2000
     })).toPass();
   });
 });
@@ -190,10 +227,14 @@ describe('Globals coercion (BUG #5 fix)', () => {
 });
 
 describe('Security & Spec Fixes (BUG #5 #6 #7)', () => {
+
+  // BUG #5: EXEC instruction limit bypass
   it('EXEC cannot bypass instruction limit', () => {
+    // Create an inner script with 600 instructions
     let inner = '';
     for (let i = 0; i < 600; i++) inner += `LET x${i} = ${i} `;
     inner += 'RETURN TRUE';
+    // Outer: already has 500 instructions, then EXECs 600-instruction inner
     let outer = '';
     for (let i = 0; i < 500; i++) outer += `LET u${i} = ${i} `;
     outer += `EXEC [${inner}]`;
@@ -203,6 +244,7 @@ describe('Security & Spec Fixes (BUG #5 #6 #7)', () => {
     }
   });
 
+  // BUG #6: Division by zero
   it('division by zero throws', () => {
     expect(runScript('LET x = 10 / 0 RETURN TRUE')).toThrow('zero');
   });
@@ -215,6 +257,7 @@ describe('Security & Spec Fixes (BUG #5 #6 #7)', () => {
     expect(runScript('RETURN (10 / 2) EQ 5')).toPass();
   });
 
+  // BUG #7: STATE(n) unset returns 0
   it('STATE(n) returns 0 for unset port', () => {
     expect(runScript('RETURN STATE(99) EQ 0')).toPass();
   });
@@ -237,6 +280,7 @@ describe('Security & Spec Fixes (BUG #5 #6 #7)', () => {
 
 describe('Nested EXEC instruction counting (BUG #5 fix)', () => {
   it('nested EXEC counts instructions in shared counter', () => {
+    // inner=500 LETs + outer=500 LETs = ~1005 total — must PASS
     let inner = '';
     for (let i = 0; i < 500; i++) inner += `LET a${i} = ${i} `;
     inner += 'RETURN TRUE';
@@ -245,7 +289,7 @@ describe('Nested EXEC instruction counting (BUG #5 fix)', () => {
     body += 'RETURN TRUE';
     const r = runScript(`EXEC [${body}] RETURN TRUE`);
     if (!r.success) throw new Error('Expected PASS: ' + r.error);
-    if (r.instructions < 1000) throw new Error(`Instruction count too low: ${r.instructions}`);
+    if (r.instructions < 1000) throw new Error(`Instruction count too low: ${r.instructions} (shared counter not working)`);
   });
 
   it('nested EXEC blocks when combined total > 1024', () => {
@@ -255,13 +299,11 @@ describe('Nested EXEC instruction counting (BUG #5 fix)', () => {
     let body = `EXEC [${inner}] `;
     for (let i = 0; i < 510; i++) body += `LET b${i} = ${i} `;
     body += 'RETURN TRUE';
-    const r = runScript(`EXEC [${body}] RETURN TRUE`);
-    if (!r.error || !r.error.includes('MAX_INSTRUCTIONS')) {
-      throw new Error('Expected MAX_INSTRUCTIONS, got: ' + (r.error || 'no error'));
-    }
+    expect(runScript(`EXEC [${body}] RETURN TRUE`)).toThrow('MAX_INSTRUCTIONS exceeded');
   });
 
-  it('EXEC with RETURN exits inner but outer continues', () => {
-    expect(runScript('LET x = 1 EXEC [LET x = 2 RETURN TRUE] RETURN x EQ 2')).toPass();
+  it('EXEC sub-script continues parent execution after return', () => {
+    // EXEC runs sub-script, returns, parent continues
+    expect(runScript('EXEC [LET x = 99 RETURN TRUE] RETURN x EQ 99')).toPass();
   });
 });

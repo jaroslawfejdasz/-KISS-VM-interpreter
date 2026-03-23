@@ -14,16 +14,7 @@ const FUNCTIONS: Record<string, FnImpl> = {
     if (a.type === 'STRING') return MiniValue.hex(Buffer.from(a.raw, 'utf8').toString('hex'));
     return MiniValue.hex(a.raw);
   },
-  STRING: ([a]) => {
-    if (a.type === 'HEX') {
-      const hex = a.raw.replace(/^0x/i, '');
-      // Only decode if it looks like ASCII/UTF8 text
-      try {
-        return MiniValue.string(Buffer.from(hex, 'hex').toString('utf8'));
-      } catch { return MiniValue.string(a.raw); }
-    }
-    return MiniValue.string(a.asString());
-  },
+  STRING: ([a]) => MiniValue.string(a.asString()),
   ASCII: ([a]) => {
     if (a.type === 'HEX') {
       const hex = a.raw.replace('0x', '');
@@ -72,14 +63,9 @@ const FUNCTIONS: Record<string, FnImpl> = {
   POW: ([a, b]) => MiniValue.number(Math.pow(a.asNumber(), b.asNumber())),
   SQRT: ([a]) => MiniValue.number(Math.sqrt(a.asNumber())),
   SIGDIG: ([a, b]) => {
-    // SIGDIG(num, base) returns number of significant digits of num in given base
-    const n = Math.abs(Math.floor(a.asNumber()));
-    const base = Math.max(2, Math.floor(b.asNumber()));
-    if (n === 0) return MiniValue.number(0);
-    let digits = 0;
-    let tmp = n;
-    while (tmp > 0) { digits++; tmp = Math.floor(tmp / base); }
-    return MiniValue.number(digits);
+    const n = a.asNumber();
+    const digits = b.asNumber();
+    return MiniValue.number(parseFloat(n.toPrecision(digits)));
   },
 
   // === HEX ===

@@ -1,6 +1,10 @@
 # kiss-vm-lint
 
-Static analyzer and linter for [Minima](https://minima.global) KISS VM smart contracts.
+Static analyzer and linter for [Minima](https://minima.global) **KISS VM** smart contract scripts.
+
+Catches errors before you deploy — without running the contract.
+
+---
 
 ## Install
 
@@ -10,71 +14,111 @@ npm install -g kiss-vm-lint
 
 ## Usage
 
-### CLI
-
 ```bash
 # Lint a file
-kiss-vm-lint contract.kiss
+kiss-vm-lint my-contract.kvm
 
-# Lint from stdin
-echo "RETURN SIGNEDBY(0xABCD)" | kiss-vm-lint --stdin
+# Lint multiple files
+kiss-vm-lint contracts/*.kvm
 
-# Multiple files
-kiss-vm-lint *.kiss
+# Pipe from stdin
+echo "RETURN SIGNEDBY(0xaabb)" | kiss-vm-lint
+
+# JSON output (for editors/CI)
+kiss-vm-lint --json contract.kvm
+
+# Strict mode: fail on warnings too
+kiss-vm-lint --strict contract.kvm
+
+# Hide info messages
+kiss-vm-lint --no-info contract.kvm
 ```
 
-### API
+## What it catches
+
+### Errors (block deployment)
+| Code | Description |
+|------|-------------|
+| E001 | Unterminated string literal |
+| E002 | Invalid hex literal (`0x` without digits) |
+| E003 | Unknown character |
+| E010 | Instruction limit exceeded (> 1024) |
+| E011 | Script has no `RETURN` statement |
+| E020 | Expected statement keyword |
+| E021 | Function used as statement |
+| E030 | `LET` requires a variable name |
+| E040-E042 | `IF`/`THEN`/`ENDIF` structure errors |
+| E050-E051 | `WHILE`/`DO`/`ENDWHILE` structure errors |
+| E060 | Division by zero |
+| E070-E083 | Expression / function call errors (arity, missing parens) |
+
+### Warnings (potential issues)
+| Code | Description |
+|------|-------------|
+| W010 | Variable assigned but never used |
+| W030 | Deeply nested `WHILE` loop |
+| W040 | Dead code after `RETURN` |
+| W050 | Use `EQ` instead of `=` for equality |
+| W060 | Unknown global variable |
+| W070 | Variable used before `LET` |
+| W080 | Infinite `WHILE TRUE` loop detected |
+| W090 | No authorization check — coin can be spent by anyone |
+| W091 | `MULTISIG(n, ...)` impossible — `n` exceeds number of keys provided |
+
+### Info (security hints)
+| Code | Description |
+|------|-------------|
+| I001 | `EXEC` with dynamic code — static analysis limited |
+| I002 | `MAST` by hash — ensure hash is audited |
+| I010 | `STATE()` — port number consistency |
+| I011 | `PREVSTATE()` — pair with `SAMESTATE()` if needed |
+| I012 | `VERIFYOUT()` — validate both amount AND address |
+
+## Programmatic API
 
 ```js
-import { lint, formatResult } from 'kiss-vm-lint';
+const { analyze } = require('kiss-vm-lint');
 
-const result = lint(`
-  LET sig = SIGNEDBY(0xABC123)
-  RETURN sig
+const result = analyze(`
+  LET lockBlock = 1000
+  IF @BLOCK LT lockBlock THEN
+    RETURN FALSE
+  ENDIF
+  RETURN SIGNEDBY(0xYOUR_PUBLIC_KEY)
 `);
 
-console.log(formatResult(result, 'mycontract.kiss'));
-console.log(result.clean);  // true/false
-console.log(result.errors); // number of errors
+console.log(result.summary);
+// { errors: 0, warnings: 0, infos: 0, instructionEstimate: 4 }
+
+if (result.errors.length > 0) {
+  result.errors.forEach(e => console.log(`[${e.code}] ${e.message}`));
+}
 ```
 
-## Rules
+## KISS VM Quick Reference
 
-| Rule | Severity | Description |
-|------|----------|-------------|
-| `instruction-limit` | error/warning | Detects scripts approaching/exceeding 1024 instruction limit |
-| `return-present` | warning | Script must have a RETURN statement |
-| `balanced-if` | error | Every IF must have a matching ENDIF |
-| `balanced-while` | error | Every WHILE must have a matching ENDWHILE |
-| `address-check` | warning | Contracts should verify output addresses or require signatures |
-| `no-rsa` | warning | RSA is deprecated — use CHECKSIG with WOTS keys |
-| `no-dead-code` | warning | Multiple top-level RETURN statements |
-| `no-shadow-globals` | warning | LET should not shadow @-variables |
-| `assert-usage` | info | Many ASSERT statements detected |
+KISS VM is Minima's scripting language for UTxO smart contracts. Every coin has a script that must return `TRUE` to be spent.
 
-## Custom Rules
+```
+/* Time lock + signature */
+LET lockBlock = 1000
+IF @BLOCK LT lockBlock THEN
+  RETURN FALSE
+ENDIF
+RETURN SIGNEDBY(0xYOUR_KEY)
 
-```js
-import { KissVMLinter, ALL_RULES } from 'kiss-vm-lint';
+/* 2-of-3 multisig */
+RETURN MULTISIG(2, 0xKEY1, 0xKEY2, 0xKEY3)
 
-const myRule = {
-  id: 'my-rule',
-  description: 'Custom rule',
-  severity: 'warning',
-  check(tokens, script) {
-    // return array of LintIssue objects
-    return [];
-  }
-};
-
-const linter = new KissVMLinter([...ALL_RULES, myRule]);
-const result = linter.lint(script);
+/* Atomic swap */
+RETURN VERIFYOUT(0, 100, 0xRECIPIENT_ADDR, 0x00)
 ```
 
-## Exit Codes
+## Known limitations
 
-- `0` — no errors (warnings are OK)
-- `1` — errors found, or file not readable
+- `CHECKSIG` is not validated (requires live node)
+- `PROOF` (MMR) is not validated (requires live node)
+- `EXEC` with dynamic scripts cannot be statically analyzed
 
 ## License
 

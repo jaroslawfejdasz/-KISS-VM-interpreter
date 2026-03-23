@@ -1,0 +1,34 @@
+{
+  "name": "create-minidapp",
+  "version": "0.1.0",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "description": "Scaffold CLI for Minima MiniDapp projects",
+  "main": "dist/index.js",
+  "bin": {
+    "create-minidapp": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node tests/run.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "minima",
+    "minidapp",
+    "scaffold",
+    "cli"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minima-global/developer-toolkit"
+  }
+}

@@ -1,20 +1,35 @@
 {
   "name": "minima-developer-toolkit",
+  "version": "0.1.0",
   "private": true,
+  "description": "Developer Toolkit for the Minima blockchain ecosystem",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "clean": "find packages -name dist -type d | xargs rm -rf",
-    "publish:all": "npm run build && npm publish --workspaces --access public"
+    "test": "npm run test  --workspaces --if-present",
+    "lint": "npm run lint  --workspaces --if-present",
+    "clean": "find packages -name dist -type d -exec rm -rf {} + 2>/dev/null; true"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter"
+  },
+  "keywords": [
+    "minima",
+    "blockchain",
+    "kiss-vm",
+    "minidapp",
+    "developer-tools"
+  ],
+  "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=16"
   },
-  "devDependencies": {
-    "typescript": "^5.4.0"
-  }
+  "author": "Jaroslaw Fejdasz",
+  "bugs": {
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter/issues"
+  },
+  "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme"
 }

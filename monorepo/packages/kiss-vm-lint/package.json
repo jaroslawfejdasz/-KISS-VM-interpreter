@@ -1,41 +1,45 @@
 {
   "name": "kiss-vm-lint",
-  "version": "0.3.0",
-  "description": "Static analyzer and linter for Minima KISS VM smart contracts",
-  "keywords": [
-    "minima",
-    "blockchain",
-    "kissvm",
-    "linter",
-    "static-analysis",
-    "smart-contracts"
-  ],
-  "author": "Minima Developer Toolkit",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter.git",
-    "directory": "monorepo/packages/kiss-vm-lint"
-  },
+  "version": "0.4.0",
+  "description": "Static analyzer and linter for Minima KISS VM smart contract scripts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "kiss-vm-lint": "dist/cli.js"
+    "kiss-vm-lint": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "./node_modules/.bin/tsc",
+    "test": "node tests/run.js",
+    "prepublishOnly": "npm run build && npm test"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
-  "scripts": {
-    "build": "tsc",
-    "prepublishOnly": "npm run build",
-    "test": "node --test tests/linter.test.js"
-  },
+  "keywords": [
+    "minima",
+    "kiss-vm",
+    "blockchain",
+    "linter",
+    "smart-contracts",
+    "static-analysis"
+  ],
+  "author": "Jaroslaw Fejdasz",
+  "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=14"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0",
-    "typescript": "^5.4.0"
-  }
+    "typescript": "5.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter",
+    "directory": "packages/"
+  },
+  "bugs": {
+    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter/issues"
+  },
+  "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme"
 }

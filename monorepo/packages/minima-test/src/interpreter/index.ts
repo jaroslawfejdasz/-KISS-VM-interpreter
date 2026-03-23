@@ -401,10 +401,8 @@ export class KissVMInterpreter {
           this.expect('LPAREN');
           const argTok = this.advance(); // raw VARIABLE or KEYWORD token
           this.expect('RPAREN');
-          // Variable names are case-sensitive in storage; try as-is and uppercase
-          const varNameRaw = argTok.value;
-          const exists = this.env.hasVariable(varNameRaw) || this.env.hasVariable(varNameRaw.toUpperCase());
-          return MiniValue.boolean(exists);
+          const varName = argTok.value.toUpperCase();
+          return MiniValue.boolean(this.env.hasVariable(varName));
         }
         // Parse args
         this.expect('LPAREN');

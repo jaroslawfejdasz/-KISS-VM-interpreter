@@ -1,0 +1,23 @@
+import { Token, LintError } from './tokenizer';
+export type Rule = (tokens: Token[], script: string) => LintError[];
+export declare const E011_NoReturn: Rule;
+export declare const E020_InvalidStatement: Rule;
+export declare const E021_FunctionAsStatement: Rule;
+export declare const E030_LetInvalid: Rule;
+export declare const E040_IfWithoutThen: Rule;
+export declare const E042_IfWithoutEndif: Rule;
+export declare const E050_WhileWithoutDo: Rule;
+export declare const E051_WhileWithoutEndwhile: Rule;
+export declare const E060_DivisionByZero: Rule;
+export declare const E080_FunctionWithoutParens: Rule;
+export declare const E081_UnclosedParen: Rule;
+export declare const E082_WrongArgCount: Rule;
+export declare const W010_UnusedVariable: Rule;
+export declare const W040_DeadCode: Rule;
+export declare const W050_AssignmentInExpr: Rule;
+export declare const W060_UnknownGlobal: Rule;
+export declare const W070_UseBeforeLet: Rule;
+export declare const R004_InstructionLimit: Rule;
+export declare const R006_ChecksigNote: Rule;
+export declare const ALL_RULES: Rule[];
+//# sourceMappingURL=rules.d.ts.map

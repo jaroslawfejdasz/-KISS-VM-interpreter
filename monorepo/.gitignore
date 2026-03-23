@@ -1,6 +1,5 @@
 node_modules/
 dist/
-*.log
-.env
-.env.*
-package-lock.json
+*.js.map
+.DS_Store
+*.tsbuildinfo
