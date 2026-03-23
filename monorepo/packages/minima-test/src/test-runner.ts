@@ -2,7 +2,9 @@
  * Test runner — Jest/Node-style API for KISS VM contracts
  */
 
-import { KissVMInterpreter } from './interpreter.js';
+import { KissVMInterpreter } from './interpreter/index.js';
+import { Environment } from './interpreter/environment.js';
+import { MiniValue as NewMiniValue } from './interpreter/values.js';
 import { MockTransaction } from './mock-transaction.js';
 import {
   TestCase,
@@ -10,6 +12,7 @@ import {
   TestSuiteResult,
   TransactionContext,
   ContractResult,
+  ContractExecution,
 } from './types.js';
 
 // ANSI colors
@@ -33,6 +36,89 @@ interface SuiteEntry {
 
 let currentSuite: SuiteEntry | null = null;
 const suites: SuiteEntry[] = [];
+
+// ── Adapter: TransactionContext → Environment ─────────────────────────────────
+
+function buildEnvironment(ctx: TransactionContext): Environment {
+  const env = new Environment();
+  env.signatures = ctx.signers.map(s => s.address);
+
+  // Set globals from context
+  const blockNum = Number(ctx.block ?? 1000n);
+  env.setGlobal('@BLOCK', NewMiniValue.number(blockNum));
+  env.setGlobal('@BLOCKMILLI', NewMiniValue.number(Number(ctx.blocktime ?? 0n)));
+  env.setGlobal('@TOTIN', NewMiniValue.number(ctx.inputs.length));
+  env.setGlobal('@TOTOUT', NewMiniValue.number(ctx.outputs.length));
+
+  const inp = ctx.inputs[0];
+  if (inp) {
+    const created = Number((inp.stateVars as any)?._blockCreated ?? 0n);
+    env.setGlobal('@CREATED', NewMiniValue.number(created));
+    env.setGlobal('@COINAGE', NewMiniValue.number(blockNum - created));
+    env.setGlobal('@INPUT', NewMiniValue.number(0));
+    env.setGlobal('@COINID', NewMiniValue.hex(inp.coinid ?? '0x00'));
+    env.setGlobal('@AMOUNT', NewMiniValue.number(Number(inp.amount)));
+    env.setGlobal('@ADDRESS', NewMiniValue.hex(inp.address));
+    env.setGlobal('@TOKENID', NewMiniValue.hex(inp.tokenid ?? '0x00'));
+    env.setGlobal('@SCRIPT', NewMiniValue.string(inp.script ?? ''));
+  } else {
+    env.setGlobal('@CREATED', NewMiniValue.number(0));
+    env.setGlobal('@COINAGE', NewMiniValue.number(0));
+    env.setGlobal('@INPUT', NewMiniValue.number(0));
+    env.setGlobal('@COINID', NewMiniValue.hex('0x00'));
+    env.setGlobal('@AMOUNT', NewMiniValue.number(0));
+    env.setGlobal('@ADDRESS', NewMiniValue.hex('0x00'));
+    env.setGlobal('@TOKENID', NewMiniValue.hex('0x00'));
+    env.setGlobal('@SCRIPT', NewMiniValue.string(''));
+  }
+
+  // Build mock transaction object for STATE/VERIFYOUT etc.
+  const mockTx: any = {
+    inputs: ctx.inputs.map(i => ({
+      coinId: i.coinid ?? '0x00',
+      address: i.address,
+      amount: Number(i.amount),
+      tokenId: i.tokenid ?? '0x00',
+      blockCreated: 0,
+      stateVars: i.stateVars ?? {},
+    })),
+    outputs: ctx.outputs.map(o => ({
+      address: o.address,
+      amount: Number(o.amount),
+      tokenId: o.tokenid ?? '0x00',
+      keepState: false,
+    })),
+    blockNumber: blockNum,
+    blockTime: Number(ctx.blocktime ?? 0n),
+    signatures: ctx.signers.map(s => s.address),
+    stateVars: ctx.stateVars ?? {},
+    prevStateVars: ctx.prevStateVars ?? {},
+  };
+
+  env.transaction = mockTx;
+  env.inputIndex = 0;
+  return env;
+}
+
+function executeScript(script: string, ctx: TransactionContext): ContractExecution {
+  const env = buildEnvironment(ctx);
+  const vm = new KissVMInterpreter(env);
+  try {
+    const passed = vm.run(script);
+    return {
+      result: passed ? 'TRUE' : 'FALSE',
+      trace: [],
+      gasUsed: env.instructionCount,
+    };
+  } catch (e: any) {
+    return {
+      result: 'EXCEPTION',
+      trace: [],
+      error: e.message,
+      gasUsed: env.instructionCount,
+    };
+  }
+}
 
 // ── Public test API ───────────────────────────────────────────────────────────
 
@@ -71,8 +157,7 @@ export class Expectation {
   ) {}
 
   async toPass(): Promise<void> {
-    const vm = new KissVMInterpreter(this.ctx);
-    const res = vm.execute(this.script);
+    const res = executeScript(this.script, this.ctx);
     if (res.result !== 'TRUE') {
       throw new Error(
         `Expected contract to pass (TRUE), got ${res.result}\n` +
@@ -83,8 +168,7 @@ export class Expectation {
   }
 
   async toFail(): Promise<void> {
-    const vm = new KissVMInterpreter(this.ctx);
-    const res = vm.execute(this.script);
+    const res = executeScript(this.script, this.ctx);
     if (res.result === 'TRUE') {
       throw new Error(
         `Expected contract to fail (FALSE/EXCEPTION), but it returned TRUE\n` +
@@ -94,8 +178,7 @@ export class Expectation {
   }
 
   async toReturn(expected: ContractResult): Promise<void> {
-    const vm = new KissVMInterpreter(this.ctx);
-    const res = vm.execute(this.script);
+    const res = executeScript(this.script, this.ctx);
     if (res.result !== expected) {
       throw new Error(
         `Expected ${expected}, got ${res.result}\n` +
@@ -105,8 +188,7 @@ export class Expectation {
   }
 
   async toThrow(errorContains?: string): Promise<void> {
-    const vm = new KissVMInterpreter(this.ctx);
-    const res = vm.execute(this.script);
+    const res = executeScript(this.script, this.ctx);
     if (res.result !== 'EXCEPTION') {
       throw new Error(`Expected EXCEPTION, got ${res.result}`);
     }
@@ -125,8 +207,7 @@ export function expectContract(script: string, ctx: TransactionContext): Expecta
 // ── Simple assertion helper ───────────────────────────────────────────────────
 
 export function runContract(script: string, ctx: TransactionContext): ContractResult {
-  const vm = new KissVMInterpreter(ctx);
-  return vm.execute(script).result;
+  return executeScript(script, ctx).result;
 }
 
 // ── Test runner ───────────────────────────────────────────────────────────────
@@ -172,8 +253,7 @@ export function runTestSuite(name: string, cases: TestCase[]): TestSuiteResult {
 
   for (const tc of cases) {
     const t0 = Date.now();
-    const vm = new KissVMInterpreter(tc.context);
-    const exec = vm.execute(tc.script);
+    const exec = executeScript(tc.script, tc.context);
 
     const got: ContractResult = exec.result;
     const expectedResult: ContractResult = tc.expected ? 'TRUE' : 'FALSE';

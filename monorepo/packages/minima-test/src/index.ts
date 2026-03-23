@@ -16,7 +16,7 @@
  * });
  */
 
-export { KissVMInterpreter } from './interpreter.js';
+export { KissVMInterpreter } from './interpreter/index.js';
 export { MockTransaction } from './mock-transaction.js';
 export {
   describe,
