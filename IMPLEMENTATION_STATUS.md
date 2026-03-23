@@ -1,6 +1,6 @@
 # minima-core-cpp Implementation Status
 
-**Date:** 2026-03-23  
+**Date:** 2026-03-23 (updated)  
 **Test suites:** 24/24 pass ✅  
 **Lines of C++:** ~8500
 
@@ -22,7 +22,7 @@ Wire-exact compatibility with the Java reference implementation.
 | `serialization/` — DataStream | ✅ | (all) |
 | `objects/` — Coin, TxPoW, Witness, Greeting, Pulse, Genesis | ✅ | test_txpow, test_witness_wire, test_genesis |
 | `kissvm/` — interpreter, parser, 42+ builtins | ✅ | test_kissvm |
-| `mmr/` — MMRSet, MMRProof, MegaMMR | ✅ | test_mmr, test_megammr |
+| `mmr/` — MMRSet, MMRProof, MegaMMR (checkpoint/rollback/fast-sync) | ✅ | test_mmr, test_megammr |
 | `chain/` — TxPowTree, BlockStore, Cascade, DifficultyAdjust | ✅ | test_chain, test_cascade, test_difficulty |
 | `database/` — MinimaDB, Wallet | ✅ | test_database |
 | `persistence/` — SQLite BlockStore, UTxOStore | ✅ | test_persistence |
