@@ -30,3 +30,4 @@ node_modules/
 .vscode/
 .idea/
 *.swp
+.agents/
