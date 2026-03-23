@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
+#include <queue>
 
 namespace minima::chain {
 
@@ -70,11 +72,80 @@ public:
         return chain;
     }
 
+    /**
+     * pruneBelow — usuń węzły głębiej niż `depth` (od korzenia).
+     * Uwaga: nie naprawia wskaźników parent/children — używaj trimTree() zamiast tego.
+     */
     void pruneBelow(int64_t depth) {
         std::vector<MiniData> toRemove;
         for (auto& [id, node] : m_nodes)
             if (node->depth() < depth) toRemove.push_back(id);
         for (const auto& id : toRemove) { delete m_nodes[id]; m_nodes.erase(id); }
+    }
+
+    /**
+     * trimTree — bezpieczne przycinanie drzewa.
+     * Java ref: TxPoWTree.trimTree(int keepDepth)
+     *
+     * Zachowuje `keepDepth` poziomów od aktualnego tipa w górę.
+     * Wyznacza nowy korzeń (keepDepth poziomów powyżej tipa),
+     * usuwa wszystkie węzły poza zachowywaną gałęzią kanoniczną + jej fork-dzieci,
+     * naprawia wskaźnik parent nowego korzenia (nullptr) i odcina stary root.
+     *
+     * Algorytm:
+     *   1. Wyznacz newRoot = tip przesunięty w górę o keepDepth kroków
+     *   2. Zbierz wszystkie węzły w poddrzewie newRoot (BFS)
+     *   3. Usuń wszystkie węzły spoza poddrzewa
+     *   4. Odetnij rodzica newRoot
+     *   5. Zaktualizuj m_root, przenumeruj depth od 0
+     */
+    void trimTree(int64_t keepDepth = 64) {
+        if (!m_tip || !m_root) return;
+
+        // 1. Znajdź newRoot — keepDepth kroków w górę od tipa
+        TxPoWTreeNode* newRoot = m_tip;
+        for (int64_t i = 0; i < keepDepth; ++i) {
+            if (!newRoot->parent()) break;
+            newRoot = newRoot->parent();
+        }
+
+        if (newRoot == m_root) return; // nic do przycięcia
+
+        // 2. Zbierz wszystkie węzły w poddrzewie newRoot (BFS)
+        std::unordered_set<TxPoWTreeNode*> keep;
+        {
+            std::queue<TxPoWTreeNode*> bfs;
+            bfs.push(newRoot);
+            while (!bfs.empty()) {
+                auto* cur = bfs.front(); bfs.pop();
+                keep.insert(cur);
+                for (auto* child : cur->children()) bfs.push(child);
+            }
+        }
+
+        // 3. Usuń węzły spoza poddrzewa
+        std::vector<MiniData> toRemove;
+        for (auto& [id, node] : m_nodes)
+            if (!keep.count(node)) toRemove.push_back(id);
+        for (const auto& id : toRemove) {
+            delete m_nodes[id];
+            m_nodes.erase(id);
+        }
+
+        // 4. Odetnij rodzica newRoot (staje się nowym korzeniem)
+        newRoot->detachParent();
+        m_root = newRoot;
+
+        // 5. Przenumeruj depth od 0 (BFS)
+        {
+            std::queue<std::pair<TxPoWTreeNode*, int64_t>> bfs;
+            bfs.push({m_root, 0});
+            while (!bfs.empty()) {
+                auto [node, d] = bfs.front(); bfs.pop();
+                node->setDepth(d);
+                for (auto* child : node->children()) bfs.push({child, d + 1});
+            }
+        }
     }
 
     void clear() {

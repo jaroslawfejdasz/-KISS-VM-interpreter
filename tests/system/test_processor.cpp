@@ -277,3 +277,134 @@ TEST_SUITE("TxPoWGenerator") {
         CHECK(txp.header().blockNumber.getAsLong() == 0);
     }
 }
+
+// ── TxPoWProcessor: trimTree ─────────────────────────────────────────────────
+TEST_SUITE("TxPoWProcessor.trimTree") {
+    TEST_CASE("tree grows then gets trimmed") {
+        // Build a chain of 50 blocks, verify tree stays bounded
+        MinimaDB db;
+        TxPoWProcessor proc(db);
+
+        TxPoW genesis = makeBlock(0, zeroID());
+        proc.processTxPoWSync(genesis);
+        MiniData prev = genesis.computeID();
+
+        for (int i = 1; i <= 50; ++i) {
+            TxPoW b = makeBlock(i, prev, i);
+            prev = b.computeID();
+            auto r = proc.processTxPoWSync(b);
+            CHECK(r == ProcessResult::ACCEPTED);
+        }
+
+        CHECK(proc.blocksProcessed() == 51);
+        // Tree should be trimmed to ≤ TREE_KEEP_DEPTH+1 nodes
+        // (32 keep depth + some buffer)
+        size_t treeSize = db.txPowTree().size();
+        CHECK(treeSize <= 33); // keepDepth=32 → max ~33 nodes in canonical chain
+        CHECK(db.txPowTree().tip() != nullptr);
+        CHECK(db.txPowTree().tip()->blockNumber() == 50);
+    }
+
+    TEST_CASE("trimTree preserves tip") {
+        MinimaDB db;
+        TxPoWProcessor proc(db);
+
+        // Build 40 blocks
+        TxPoW g = makeBlock(0, zeroID());
+        proc.processTxPoWSync(g);
+        MiniData prev = g.computeID();
+        for (int i = 1; i <= 40; ++i) {
+            TxPoW b = makeBlock(i, prev, i);
+            prev = b.computeID();
+            proc.processTxPoWSync(b);
+        }
+
+        auto* tip = db.txPowTree().tip();
+        REQUIRE(tip != nullptr);
+        CHECK(tip->blockNumber() == 40);
+    }
+
+    TEST_CASE("trimTree: root is updated after pruning") {
+        MinimaDB db;
+        TxPoWProcessor proc(db);
+
+        TxPoW g = makeBlock(0, zeroID());
+        proc.processTxPoWSync(g);
+        MiniData prev = g.computeID();
+        for (int i = 1; i <= 40; ++i) {
+            TxPoW b = makeBlock(i, prev, i);
+            prev = b.computeID();
+            proc.processTxPoWSync(b);
+        }
+
+        auto* root = db.txPowTree().root();
+        REQUIRE(root != nullptr);
+        // Root should not be genesis anymore (it was trimmed away)
+        CHECK(root->blockNumber() > 0);
+        // Root should have no parent
+        CHECK(root->parent() == nullptr);
+        // Root depth should be 0
+        CHECK(root->depth() == 0);
+    }
+
+    TEST_CASE("trimTree: chain shorter than keepDepth is not trimmed") {
+        MinimaDB db;
+        TxPoWProcessor proc(db);
+
+        // Only 5 blocks — keepDepth=32, so nothing should be trimmed
+        TxPoW g = makeBlock(0, zeroID());
+        proc.processTxPoWSync(g);
+        MiniData prev = g.computeID();
+        for (int i = 1; i <= 5; ++i) {
+            TxPoW b = makeBlock(i, prev, i);
+            prev = b.computeID();
+            proc.processTxPoWSync(b);
+        }
+
+        // All 6 nodes should be present
+        CHECK(db.txPowTree().size() == 6);
+        CHECK(db.txPowTree().root()->blockNumber() == 0);
+    }
+
+    TEST_CASE("trimTree: direct call on TxPowTree") {
+        using namespace minima::chain;
+        TxPowTree tree;
+
+        // Add 20 blocks linearly
+        TxPoW g = makeBlock(0, zeroID());
+        tree.addTxPoW(g);
+        MiniData prev = g.computeID();
+        for (int i = 1; i <= 20; ++i) {
+            TxPoW b = makeBlock(i, prev, i);
+            tree.addTxPoW(b);
+            prev = b.computeID();
+        }
+        CHECK(tree.size() == 21);
+
+        // Trim with keepDepth=5 → should keep 6 nodes (blockNums 15-20)
+        tree.trimTree(5);
+        CHECK(tree.size() == 6);
+        CHECK(tree.tip()->blockNumber() == 20);
+        CHECK(tree.root()->blockNumber() == 15);
+        CHECK(tree.root()->parent() == nullptr);
+        CHECK(tree.root()->depth() == 0);
+    }
+
+    TEST_CASE("trimTree: depth renumbering is correct") {
+        using namespace minima::chain;
+        TxPowTree tree;
+
+        TxPoW g = makeBlock(0, zeroID());
+        tree.addTxPoW(g);
+        MiniData prev = g.computeID();
+        for (int i = 1; i <= 10; ++i) {
+            TxPoW b = makeBlock(i, prev, i);
+            tree.addTxPoW(b);
+            prev = b.computeID();
+        }
+
+        tree.trimTree(4); // keep 5 nodes: blockNums 6-10
+        CHECK(tree.root()->depth() == 0);
+        CHECK(tree.tip()->depth() == 4);
+    }
+}

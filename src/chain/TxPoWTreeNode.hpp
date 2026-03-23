@@ -37,6 +37,15 @@ public:
     const std::vector<TxPoWTreeNode*>& children() const { return m_children; }
     bool isLeaf() const { return m_children.empty(); }
 
+    /// Odetnij od rodzica (dla trimTree — nowy korzeń)
+    void detachParent() {
+        m_parent = nullptr;
+        m_depth  = 0;
+    }
+
+    /// Ręcznie ustaw depth (dla przenumerowania po trimTree)
+    void setDepth(int64_t d) { m_depth = d; }
+
     TxPoWTreeNode* heaviestChild() const {
         if (m_children.empty()) return nullptr;
         TxPoWTreeNode* best = m_children[0];

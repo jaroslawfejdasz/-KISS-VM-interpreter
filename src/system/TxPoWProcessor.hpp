@@ -158,12 +158,16 @@ private:
         if (m_onBlock) m_onBlock(txpow);
 
         // Aktualizuj MMR jeśli to nowy tip
-        // (pełna implementacja wymaga MMR rebuild po reorg)
         updateMMRIfTip(txpow);
 
         // Usuń z mempoola transakcje które są już w bloku
         for (const auto& txID : txpow.body().txnList)
             m_db.mempool().remove(txID);
+
+        // Przytnij drzewo — zachowaj TREE_KEEP_DEPTH poziomów od tipa
+        // Java ref: TxPoWProcessor → MinimaDB.getTxPoWTree().trimTree()
+        static constexpr int64_t TREE_KEEP_DEPTH = 32;
+        m_db.txPowTree().trimTree(TREE_KEEP_DEPTH);
 
         return ProcessResult::ACCEPTED;
     }
