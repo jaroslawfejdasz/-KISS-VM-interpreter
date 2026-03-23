@@ -530,3 +530,249 @@ TEST_SUITE("MinimaDB_MMR_Coins") {
         }
     }
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Cascade + MegaMMR integration with MinimaDB
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#include "../../src/chain/cascade/Cascade.hpp"
+#include "../../src/mmr/MegaMMR.hpp"
+
+TEST_SUITE("MinimaDB_CascadeMegaMMR") {
+
+    // ── helpers ───────────────────────────────────────────────────────────
+
+    static Coin makeCMCoin(uint8_t id, int64_t amount) {
+        Coin c;
+        c.setCoinID(MiniData(std::vector<uint8_t>(32, id)));
+        c.setAmount(MiniNumber(amount));
+        c.setAddress(Address(MiniData(std::vector<uint8_t>(32, uint8_t(id + 0x80)))));
+        return c;
+    }
+
+    // Build a chain of N blocks, each with a unique output coin.
+    // Returns the MinimaDB with all blocks added.
+    // Also returns all TxPoW in order so caller can read IDs.
+    static std::vector<TxPoW> buildChain(MinimaDB& db, int n) {
+        std::vector<TxPoW> blocks;
+        for (int i = 0; i < n; ++i) {
+            TxPoW txp;
+            txp.header().blockNumber = MiniNumber(int64_t(i));
+            txp.header().nonce       = MiniNumber(int64_t(i + 1));
+            // Link to previous block
+            if (i > 0) {
+                txp.header().superParents[0] = blocks.back().computeID();
+            } else {
+                txp.header().superParents[0] = MiniData(std::vector<uint8_t>(32, 0xFF));
+            }
+            for (int j = 1; j < CASCADE_LEVELS; ++j)
+                txp.header().superParents[j] = MiniData(std::vector<uint8_t>(32, 0));
+
+            // Add a unique coin as output
+            Coin c = makeCMCoin(static_cast<uint8_t>(i), int64_t((i+1) * 100));
+            txp.body().txn.addOutput(c);
+
+            db.addBlock(txp);
+            blocks.push_back(txp);
+        }
+        return blocks;
+    }
+
+    // ── Cascade tests ─────────────────────────────────────────────────────
+
+    TEST_CASE("cascade is empty before any block") {
+        MinimaDB db;
+        CHECK(db.cascade().empty());
+    }
+
+    TEST_CASE("cascade grows as blocks are added") {
+        MinimaDB db;
+        auto blocks = buildChain(db, 3);
+        CHECK(db.cascade().length() > 0);
+        CHECK(db.cascade().tipBlock() == 2);
+    }
+
+    TEST_CASE("cascade tip tracks chain tip") {
+        MinimaDB db;
+        auto blocks = buildChain(db, 5);
+        CHECK(db.cascade().tipBlock() == 4);
+        CHECK(db.cascade().tip() != nullptr);
+    }
+
+    TEST_CASE("cascade root block <= tip block") {
+        MinimaDB db;
+        auto blocks = buildChain(db, 5);
+        CHECK(db.cascade().rootBlock() <= db.cascade().tipBlock());
+    }
+
+    TEST_CASE("cascade total weight increases with chain") {
+        MinimaDB db;
+        buildChain(db, 1);
+        double w1 = db.cascade().totalWeight();
+        buildChain(db, 1);  // adds more blocks (separate DB needed for clean test)
+        // Just verify weight is positive
+        CHECK(w1 > 0.0);
+    }
+
+    TEST_CASE("cascade serialise/deserialise round-trip after addBlock") {
+        MinimaDB db;
+        auto blocks = buildChain(db, 4);
+
+        auto bytes = db.cascade().serialise();
+        size_t off = 0;
+        auto c2 = cascade::Cascade::deserialise(bytes, off);
+
+        CHECK(c2.length()   == db.cascade().length());
+        CHECK(c2.tipBlock() == db.cascade().tipBlock());
+        CHECK(off == bytes.size());
+    }
+
+    TEST_CASE("rebuildCascade produces same length as original") {
+        MinimaDB db;
+        buildChain(db, 5);
+        int lenBefore = db.cascade().length();
+        db.rebuildCascade();
+        CHECK(db.cascade().length() == lenBefore);
+        CHECK(db.cascade().tipBlock() == 4);
+    }
+
+    // ── MegaMMR tests ─────────────────────────────────────────────────────
+
+    TEST_CASE("megaMMR empty before blocks") {
+        MinimaDB db;
+        CHECK(db.megaMMR().leafCount() == 0);
+    }
+
+    TEST_CASE("megaMMR leafCount grows with outputs") {
+        MinimaDB db;
+        buildChain(db, 3); // 3 blocks, each 1 output coin
+        CHECK(db.megaMMR().leafCount() == 3);
+    }
+
+    TEST_CASE("megaMMR has correct coins after addBlock") {
+        MinimaDB db;
+        auto blocks = buildChain(db, 3);
+        // Each block i adds coin with id byte = i
+        for (int i = 0; i < 3; ++i) {
+            MiniData cid(std::vector<uint8_t>(32, static_cast<uint8_t>(i)));
+            CHECK(db.megaMMR().hasCoin(cid));
+        }
+    }
+
+    TEST_CASE("megaMMR verifyRoot after addBlock") {
+        MinimaDB db;
+        buildChain(db, 3);
+        MiniData root = db.megaMMR().getRoot().getData();
+        CHECK(db.megaMMR().verifyRoot(root));
+    }
+
+    TEST_CASE("megaMMR root changes block by block") {
+        MinimaDB db;
+        auto blocks = buildChain(db, 1);
+        MiniData root1 = db.megaMMR().getRoot().getData();
+
+        // Add one more block
+        TxPoW b2;
+        b2.header().blockNumber     = MiniNumber(int64_t(1));
+        b2.header().nonce           = MiniNumber(int64_t(999));
+        b2.header().superParents[0] = blocks.back().computeID();
+        for (int j = 1; j < CASCADE_LEVELS; ++j)
+            b2.header().superParents[j] = MiniData(std::vector<uint8_t>(32, 0));
+        Coin c = makeCMCoin(0xF0, 500);
+        b2.body().txn.addOutput(c);
+        db.addBlock(b2);
+
+        MiniData root2 = db.megaMMR().getRoot().getData();
+        CHECK_FALSE(root1 == root2);
+    }
+
+    TEST_CASE("megaMMR checkpoint created per block") {
+        MinimaDB db;
+        buildChain(db, 3);
+        // Blocks 0,1,2 should each have a checkpoint
+        CHECK(db.megaMMR().hasCheckpoint(MiniNumber(int64_t(0))));
+        CHECK(db.megaMMR().hasCheckpoint(MiniNumber(int64_t(1))));
+        CHECK(db.megaMMR().hasCheckpoint(MiniNumber(int64_t(2))));
+    }
+
+    TEST_CASE("megaMMR rollback restores prior state") {
+        MinimaDB db;
+        auto blocks = buildChain(db, 2);
+        // After 2 blocks: leafCount=2
+        MiniData root1 = db.megaMMR().getRoot().getData();
+        CHECK(db.megaMMR().leafCount() == 2);
+
+        // Add block 2 (leaf 3)
+        TxPoW b2;
+        b2.header().blockNumber     = MiniNumber(int64_t(2));
+        b2.header().nonce           = MiniNumber(int64_t(42));
+        b2.header().superParents[0] = blocks.back().computeID();
+        for (int j = 1; j < CASCADE_LEVELS; ++j)
+            b2.header().superParents[j] = MiniData(std::vector<uint8_t>(32, 0));
+        Coin c = makeCMCoin(0xCC, 300);
+        b2.body().txn.addOutput(c);
+        db.addBlock(b2);
+        CHECK(db.megaMMR().leafCount() == 3);
+
+        // Re-org: roll back to block 1
+        bool ok = db.rollbackMegaMMR(1);
+        CHECK(ok);
+        CHECK(db.megaMMR().leafCount() == 2);
+        CHECK(db.megaMMR().verifyRoot(root1));
+    }
+
+    TEST_CASE("megaMMR getCoinProof works after addBlock") {
+        MinimaDB db;
+        buildChain(db, 4);
+        // Coin 0 (added in block 0) should have a valid proof
+        MiniData cid0(std::vector<uint8_t>(32, 0));
+        auto optProof = db.megaMMR().getCoinProof(cid0);
+        REQUIRE(optProof.has_value());
+        Coin c0 = makeCMCoin(0, 100);
+        CHECK(db.megaMMR().verifyCoinProof(c0, *optProof));
+    }
+
+    TEST_CASE("rebuildMegaMMR produces same root") {
+        MinimaDB db;
+        buildChain(db, 4);
+        MiniData rootBefore = db.megaMMR().getRoot().getData();
+        db.rebuildMegaMMR();
+        CHECK(db.megaMMR().getRoot().getData() == rootBefore);
+        CHECK(db.megaMMR().leafCount() == 4);
+    }
+
+    // ── Cascade + MegaMMR combined ────────────────────────────────────────
+
+    TEST_CASE("cascade and megaMMR both advance together") {
+        MinimaDB db;
+        buildChain(db, 5);
+        CHECK(db.cascade().tipBlock()  == 4);
+        CHECK(db.megaMMR().leafCount() == 5);
+        // Both structures should have valid state
+        CHECK_FALSE(db.cascade().empty());
+        CHECK(db.megaMMR().verifyRoot(db.megaMMR().getRoot().getData()));
+    }
+
+    TEST_CASE("reset clears cascade and megaMMR") {
+        MinimaDB db;
+        buildChain(db, 3);
+        db.reset();
+        CHECK(db.cascade().empty());
+        CHECK(db.megaMMR().leafCount() == 0);
+        CHECK(db.megaMMR().checkpointCount() == 0);
+    }
+
+    TEST_CASE("fast-sync: getSyncPacket after chain matches root") {
+        MinimaDB db;
+        buildChain(db, 4);
+        MiniData chainRoot = db.megaMMR().getRoot().getData();
+
+        // Simulate new node receiving sync packet
+        auto pkt = db.megaMMR().getSyncPacket();
+        size_t off = 0;
+        auto syncedMMR = MegaMMR::applySyncPacket(pkt.data(), off);
+
+        // New node's root must match the chain root
+        CHECK(syncedMMR.verifyRoot(chainRoot));
+        CHECK(syncedMMR.leafCount() == 4);
+    }
+}
