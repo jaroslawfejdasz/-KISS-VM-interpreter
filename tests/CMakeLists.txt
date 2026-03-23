@@ -38,3 +38,6 @@ add_minima_test(test_database   database/test_database.cpp)
 add_minima_test(test_processor system/test_processor.cpp)
 
 add_minima_test(test_integration  integration/test_integration.cpp)
+
+# Live node integration test — requires Minima Java node on 127.0.0.1:19001
+add_minima_test(test_live_node    network/test_live_node.cpp)
