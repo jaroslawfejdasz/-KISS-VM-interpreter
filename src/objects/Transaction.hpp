@@ -39,10 +39,15 @@ public:
     std::vector<uint8_t> serialise() const;
     static Transaction   deserialise(const uint8_t* data, size_t& offset);
 
+    // mLinkHash — hash linking to parent transaction (default = 0x00)
+    const MiniData& linkHash() const { return m_linkHash; }
+    Transaction& setLinkHash(const MiniData& h) { m_linkHash = h; return *this; }
+
 private:
     std::vector<Coin>          m_inputs;
     std::vector<Coin>          m_outputs;
     std::vector<StateVariable> m_stateVars;
+    MiniData                   m_linkHash;  // Java mLinkHash (writeHashToStream)
 };
 
 } // namespace minima

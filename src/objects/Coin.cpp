@@ -5,10 +5,7 @@
 
 namespace minima {
 
-// ── Builders ──────────────────────────────────────────────────────────────────
-
 Coin& Coin::addStateVar(const StateVariable& sv) {
-    // Remove existing var at same port (overwrite semantics)
     m_stateVars.erase(
         std::remove_if(m_stateVars.begin(), m_stateVars.end(),
             [&](const StateVariable& s){ return s.port() == sv.port(); }),
@@ -24,81 +21,95 @@ std::optional<StateVariable> Coin::stateVar(uint8_t port) const {
     return std::nullopt;
 }
 
-// ── Serialisation ─────────────────────────────────────────────────────────────
-// Wire format (mirrors Minima Java Coin.writeDataStream):
-//   coinID          : MiniData
-//   address         : MiniData (address hash)
-//   amount          : MiniNumber
-//   tokenID_present : bool
-//   tokenID         : MiniData   (only if present)
-//   floating        : bool
-//   spent           : bool
-//   stateVars_count : uint8
-//   stateVars[]     : StateVariable × count
+// Wire format — EXACT Java Coin.writeDataStream:
+//   mCoinID         : MiniData (writeHashToStream)
+//   mAddress        : MiniData (writeHashToStream)
+//   mAmount         : MiniNumber
+//   mTokenID        : MiniData (writeHashToStream)
+//   mStoreState     : MiniByte (1 byte bool)
+//   mMMREntryNumber : MiniNumber
+//   mSpent          : MiniNumber
+//   mBlockCreated   : MiniNumber
+//   mState.size()   : MiniNumber
+//   mState[]        : StateVariable × count
+//   hasToken        : MiniByte (1 byte bool)
+//   mToken          : Token (if hasToken)
+
+static void writeHash(DataStream& ds, const MiniData& d) {
+    uint32_t len = (uint32_t)d.bytes().size();
+    ds.writeUInt8((len >> 24) & 0xff);
+    ds.writeUInt8((len >> 16) & 0xff);
+    ds.writeUInt8((len >>  8) & 0xff);
+    ds.writeUInt8( len        & 0xff);
+    ds.writeBytes(d.bytes());
+}
+
+static MiniData readHash(const uint8_t* data, size_t& offset) {
+    uint32_t len = ((uint32_t)data[offset] << 24) | ((uint32_t)data[offset+1] << 16)
+                 | ((uint32_t)data[offset+2] << 8) | (uint32_t)data[offset+3];
+    offset += 4;
+    if (len > 65536) throw std::runtime_error("MiniData: too large");
+    MiniData d(std::vector<uint8_t>(data + offset, data + offset + len));
+    offset += len;
+    return d;
+}
 
 std::vector<uint8_t> Coin::serialise() const {
     DataStream ds;
-
-    // Write coinID
-    auto coinIdBytes = m_coinID.serialise();
-    ds.writeBytes(coinIdBytes);
-
-    // Write address hash
-    auto addrBytes = m_address.serialise();
-    ds.writeBytes(addrBytes);
-
-    // Write amount
-    auto amtBytes = m_amount.serialise();
-    ds.writeBytes(amtBytes);
-
-    // Write tokenID
-    ds.writeBool(m_tokenID.has_value());
-    if (m_tokenID.has_value()) {
-        auto tidBytes = m_tokenID->serialise();
-        ds.writeBytes(tidBytes);
-    }
-
-    ds.writeBool(m_floating);
-    ds.writeBool(m_spent);
-
-    // State variables
-    ds.writeUInt8((uint8_t)m_stateVars.size());
-    for (auto& sv : m_stateVars) {
-        auto svBytes = sv.serialise();
-        ds.writeBytes(svBytes);
-    }
-
+    writeHash(ds, m_coinID);
+    writeHash(ds, m_address.hash());
+    ds.writeBytes(m_amount.serialise());
+    writeHash(ds, m_tokenID.value_or(MiniData(std::vector<uint8_t>{0x00})));
+    ds.writeUInt8(m_storeState ? 1 : 0);
+    ds.writeBytes(m_mmrEntry.serialise());
+    ds.writeBytes(MiniNumber(int64_t(m_spent ? 1 : 0)).serialise());
+    ds.writeBytes(m_blockCreated.serialise());
+    ds.writeBytes(MiniNumber(int64_t(m_stateVars.size())).serialise());
+    for (auto& sv : m_stateVars) ds.writeBytes(sv.serialise());
+    ds.writeUInt8(0); // no Token
     return ds.buffer();
 }
 
 Coin Coin::deserialise(const uint8_t* data, size_t& offset) {
     Coin c;
-    c.m_coinID  = MiniData::deserialise(data, offset);
-
-    // address is stored as MiniData (the 32-byte hash)
-    auto addrHash = MiniData::deserialise(data, offset);
+    c.m_coinID  = readHash(data, offset);
+    auto addrHash = readHash(data, offset);
     c.m_address = Address(addrHash);
+    c.m_amount  = MiniNumber::deserialise(data, offset);
+    auto tokenID = readHash(data, offset);
+    // tokenID 0x00 = native Minima, others = custom token
+    c.m_tokenID = tokenID;
 
-    c.m_amount = MiniNumber::deserialise(data, offset);
+    c.m_storeState  = data[offset++] != 0;
+    c.m_mmrEntry    = MiniNumber::deserialise(data, offset);
+    // mSpent is MiniNumber in Java
+    auto spentNum   = MiniNumber::deserialise(data, offset);
+    c.m_spent       = (spentNum.getAsLong() != 0);
+    c.m_blockCreated = MiniNumber::deserialise(data, offset);
 
-    bool hasToken = data[offset++];
-    if (hasToken) {
-        c.m_tokenID = MiniData::deserialise(data, offset);
-    }
-
-    c.m_floating = data[offset++];
-    c.m_spent    = data[offset++];
-
-    uint8_t svCount = data[offset++];
-    for (uint8_t i = 0; i < svCount; ++i) {
+    int64_t svCount = MiniNumber::deserialise(data, offset).getAsLong();
+    for (int64_t i = 0; i < svCount; ++i)
         c.m_stateVars.push_back(StateVariable::deserialise(data, offset));
+
+    uint8_t hasToken = data[offset++];
+    if (hasToken) {
+        // Token.deserialise — skip for now (read all its fields)
+        // Token: mCoinID(hash), mScript(MiniString), mTotalTokens(MiniNumber),
+        //        mDecimals(MiniNumber), mName(MiniString), mEngineVersion(MiniNumber)
+        readHash(data, offset);  // coinID
+        // MiniString: 2-byte len + bytes
+        uint16_t slen = ((uint16_t)data[offset] << 8) | data[offset+1]; offset += 2;
+        offset += slen; // script
+        MiniNumber::deserialise(data, offset); // total tokens
+        MiniNumber::deserialise(data, offset); // decimals
+        slen = ((uint16_t)data[offset] << 8) | data[offset+1]; offset += 2;
+        offset += slen; // name
+        MiniNumber::deserialise(data, offset); // engine version
     }
 
     return c;
 }
 
-// ── hashValue() ─────────────────────────────────────────────────────────────
-// Java ref: Coin.getHashValue() = Crypto.getInstance().hashData(serialise())
 MiniData Coin::hashValue() const {
     auto bytes = serialise();
     return crypto::Hash::sha3_256(bytes.data(), bytes.size());

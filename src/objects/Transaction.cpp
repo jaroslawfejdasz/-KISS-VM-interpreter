@@ -22,7 +22,6 @@ std::optional<StateVariable> Transaction::stateVar(uint8_t port) const {
 }
 
 bool Transaction::isValid() const {
-    // Basic sanity: at least 1 output, no duplicate input coinIDs
     if (m_outputs.empty()) return false;
     for (size_t i = 0; i < m_inputs.size(); ++i)
         for (size_t j = i + 1; j < m_inputs.size(); ++j)
@@ -38,7 +37,6 @@ bool Transaction::inputsBalance() const {
 }
 
 MiniData Transaction::computeCoinID(const MiniData& txID, uint32_t outputIndex) {
-    // CoinID = SHA3(txID_bytes + big-endian uint32 output index)
     std::vector<uint8_t> buf = txID.bytes();
     buf.push_back((outputIndex >> 24) & 0xff);
     buf.push_back((outputIndex >> 16) & 0xff);
@@ -47,33 +45,56 @@ MiniData Transaction::computeCoinID(const MiniData& txID, uint32_t outputIndex) 
     return crypto::Hash::sha3_256(buf);
 }
 
-// Wire format:
-//   inputs_count  : uint8
-//   inputs[]      : Coin × count
-//   outputs_count : uint8
-//   outputs[]     : Coin × count
-//   stateVars_count : uint8
-//   stateVars[]   : StateVariable × count
+// Wire format — EXACT Java Transaction.writeDataStream:
+//   inputs_count    : MiniNumber
+//   inputs[]        : Coin × count
+//   outputs_count   : MiniNumber
+//   outputs[]       : Coin × count
+//   stateVars_count : MiniNumber
+//   stateVars[]     : StateVariable × count
+//   mLinkHash       : MiniData (writeHashToStream = 4-byte len + bytes)
 
 std::vector<uint8_t> Transaction::serialise() const {
     DataStream ds;
-    ds.writeUInt8((uint8_t)m_inputs.size());
+    ds.writeBytes(MiniNumber(int64_t(m_inputs.size())).serialise());
     for (auto& c : m_inputs)  ds.writeBytes(c.serialise());
-    ds.writeUInt8((uint8_t)m_outputs.size());
+    ds.writeBytes(MiniNumber(int64_t(m_outputs.size())).serialise());
     for (auto& c : m_outputs) ds.writeBytes(c.serialise());
-    ds.writeUInt8((uint8_t)m_stateVars.size());
+    ds.writeBytes(MiniNumber(int64_t(m_stateVars.size())).serialise());
     for (auto& sv : m_stateVars) ds.writeBytes(sv.serialise());
+    // mLinkHash: writeHashToStream = int32 len + bytes
+    uint32_t hlen = (uint32_t)m_linkHash.bytes().size();
+    ds.writeUInt8((hlen >> 24) & 0xff);
+    ds.writeUInt8((hlen >> 16) & 0xff);
+    ds.writeUInt8((hlen >>  8) & 0xff);
+    ds.writeUInt8( hlen        & 0xff);
+    ds.writeBytes(m_linkHash.bytes());
     return ds.buffer();
 }
 
 Transaction Transaction::deserialise(const uint8_t* data, size_t& offset) {
     Transaction t;
-    uint8_t inCount = data[offset++];
-    for (uint8_t i = 0; i < inCount; ++i) t.m_inputs.push_back(Coin::deserialise(data, offset));
-    uint8_t outCount = data[offset++];
-    for (uint8_t i = 0; i < outCount; ++i) t.m_outputs.push_back(Coin::deserialise(data, offset));
-    uint8_t svCount = data[offset++];
-    for (uint8_t i = 0; i < svCount; ++i) t.m_stateVars.push_back(StateVariable::deserialise(data, offset));
+
+    auto readHash = [&]() -> MiniData {
+        uint32_t len = ((uint32_t)data[offset] << 24) | ((uint32_t)data[offset+1] << 16)
+                     | ((uint32_t)data[offset+2] << 8) | (uint32_t)data[offset+3];
+        offset += 4;
+        if (len > 65536) throw std::runtime_error("MiniData: too large");
+        MiniData d(std::vector<uint8_t>(data + offset, data + offset + len));
+        offset += len;
+        return d;
+    };
+
+    int64_t inCount = MiniNumber::deserialise(data, offset).getAsLong();
+    for (int64_t i = 0; i < inCount; ++i) t.m_inputs.push_back(Coin::deserialise(data, offset));
+
+    int64_t outCount = MiniNumber::deserialise(data, offset).getAsLong();
+    for (int64_t i = 0; i < outCount; ++i) t.m_outputs.push_back(Coin::deserialise(data, offset));
+
+    int64_t svCount = MiniNumber::deserialise(data, offset).getAsLong();
+    for (int64_t i = 0; i < svCount; ++i) t.m_stateVars.push_back(StateVariable::deserialise(data, offset));
+
+    t.m_linkHash = readHash();
     return t;
 }
 
