@@ -349,22 +349,65 @@ TEST_SUITE("MinimaDB_Persistence") {
 
 // ── TxPoWProcessor MMR update ─────────────────────────────────────────────────
 TEST_SUITE("TxPoWProcessor_MMR") {
+    // Helper: tworzy genesis block (blockNum=0, parent=zero)
+    // isBlockTxPoW = (bn==0 && allZero) || (bn>0)
+    // Genesis: blockNum=0, parent=0x00...00 → allZero=true → isBlock=true
+    static TxPoW makeBlock(int64_t blockNum, int64_t nonce = 0) {
+        TxPoW txp;
+        txp.header().blockNumber = MiniNumber(blockNum);
+        txp.header().nonce       = MiniNumber(nonce);
+        // blockNum=0 genesis: all-zero parent (allZero=true)
+        // blockNum>0: parent ustawiany z zewnątrz
+        for (int i = 0; i < CASCADE_LEVELS; ++i)
+            txp.header().superParents[i] = MiniData(std::vector<uint8_t>(32, 0x00));
+        return txp;
+    }
+
     TEST_CASE("linear chain — updateMMRIfTip incremental") {
         using namespace minima::system;
         MinimaDB db;
         TxPoWProcessor proc(db);
-        proc.start();
 
-        TxPoW b0 = makeTxPoW(0xFF, 0);
-        auto r0 = proc.submitTxPoWSync(b0);
-        CHECK(r0 == ProcessResult::ACCEPTED);
+        // Genesis (blockNum=0, parent=zeros) → isBlock=true
+        TxPoW b0 = makeBlock(0);
+        auto r0 = proc.processTxPoWSync(b0);
+        REQUIRE(r0 == ProcessResult::ACCEPTED);
 
-        MiniData id0 = db.txPowTree().tip()->txPoWID();
-        TxPoW b1 = makeTxPoW(0xFF, 1, 1); b1.header().superParents[0] = id0;
-        auto r1 = proc.submitTxPoWSync(b1);
-        CHECK(r1 == ProcessResult::ACCEPTED);
+        auto* tip0 = db.txPowTree().tip();
+        REQUIRE(tip0 != nullptr);
+        MiniData id0 = tip0->txPoWID();
+
+        // Blok 1 (blockNum=1) → isBlock=true via bn>0
+        TxPoW b1 = makeBlock(1, 1);
+        b1.header().superParents[0] = id0;
+        auto r1 = proc.processTxPoWSync(b1);
+        REQUIRE(r1 == ProcessResult::ACCEPTED);
+        CHECK(db.currentHeight() == 1);
+        CHECK(db.txPowTree().size() == 2);
+    }
+
+    TEST_CASE("rebuildMMR after reorg") {
+        using namespace minima::system;
+        MinimaDB db;
+
+        // Zbuduj chain: genesis → b1a → b1b (reorg fork)
+        TxPoW genesis = makeBlock(0);
+        db.addBlock(genesis);
+        MiniData genesisID = db.txPowTree().tip()->txPoWID();
+
+        // Fork A: blok 1a
+        TxPoW b1a = makeBlock(1, 10);
+        b1a.header().superParents[0] = genesisID;
+        db.addBlock(b1a);
         CHECK(db.currentHeight() == 1);
 
-        proc.stop();
+        // Fork B: blok 1b (inny nonce → inne ID → krótszy fork, nie zmienia tipa)
+        TxPoW b1b = makeBlock(1, 20);
+        b1b.header().superParents[0] = genesisID;
+        db.addBlock(b1b);
+
+        // Rebuild MMR — powinien być stable (nie crashować)
+        db.rebuildMMR();
+        CHECK(db.currentHeight() == 1);
     }
 }
