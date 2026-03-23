@@ -16,6 +16,7 @@
 #include "../validation/TxPoWValidator.hpp"
 #include "../objects/TxPoW.hpp"
 #include "../types/MiniData.hpp"
+#include "../mmr/MMRData.hpp"
 #include <functional>
 #include <string>
 #include <vector>
@@ -210,9 +211,43 @@ private:
         return true;
     }
 
+    /**
+     * Aktualizuje MMR gdy nowy blok zostaje tipem łańcucha.
+     *
+     * Strategia:
+     *   - Jeśli nowy tip jest bezpośrednim następnikiem poprzedniego → incremental update
+     *   - Jeśli to reorg (inny rodzic) → pełny rebuild MMR z canonicalChain
+     *
+     * Java ref: TxPoWProcessor.processMMR() + MinimaDB.buildNewMMR()
+     */
     void updateMMRIfTip(const TxPoW& txpow) {
-        // Uproszczone — w pełnej implementacji: rebuild MMR dla nowego tip
-        // wymagałoby pełnego MMRSet + reorg handling
+        auto* newTip = m_db.txPowTree().tip();
+        if (!newTip) return;
+
+        MiniData newTipID = newTip->txPoWID();
+
+        // Sprawdź czy nowy blok jest aktualnym tipem
+        if (newTipID.bytes() != txpow.computeID().bytes()) {
+            // Blok zaakceptowany ale nie stał się tipem (np. short fork)
+            return;
+        }
+
+        // Sprawdź czy to proste rozszerzenie (nowy blok jest synem poprzedniego tipa)
+        bool isLinearExtension = false;
+        if (m_lastTipID.bytes().size() > 0) {
+            const auto& parent = txpow.header().superParents[0];
+            isLinearExtension = (parent.bytes() == m_lastTipID.bytes());
+        }
+
+        if (isLinearExtension) {
+            // Incremental update — tylko dodaj nowy blok do MMR
+            m_db.mmrSet().addLeaf(MMRData(txpow.computeID()));
+        } else {
+            // Reorg lub genesis — pełny rebuild
+            m_db.rebuildMMR();
+        }
+
+        m_lastTipID = newTipID;
     }
 
     BlockCallback   m_onBlock;
@@ -221,6 +256,7 @@ private:
     TxPoWSearcher   m_searcher;
     std::atomic<int64_t> m_blocksProcessed;
     std::atomic<int64_t> m_txnsProcessed;
+    MiniData        m_lastTipID;  ///< ID poprzedniego tipa — do wykrywania reorg
 };
 
 } // namespace minima::system

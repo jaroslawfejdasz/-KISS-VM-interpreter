@@ -7,6 +7,9 @@
 #include "../../src/objects/TxPoW.hpp"
 #include "../../src/types/MiniData.hpp"
 #include "../../src/types/MiniNumber.hpp"
+#include "../../src/system/TxPoWProcessor.hpp"
+#include "../../src/system/MessageProcessor.hpp"
+#include <cstdio>
 
 using namespace minima;
 using namespace minima::chain;
@@ -253,5 +256,115 @@ TEST_SUITE("Wallet") {
         Wallet w;
         MiniData unknown(std::vector<uint8_t>(32, 0xDE));
         CHECK(w.sign(unknown, MiniData(std::vector<uint8_t>{0x01})).has_value() == false);
+    }
+}
+
+// ── MinimaDB Persistence ──────────────────────────────────────────────────────
+TEST_SUITE("MinimaDB_Persistence") {
+    TEST_CASE("openPersistence creates DB and enables persistence") {
+        MinimaDB db;
+        CHECK(db.isPersistenceEnabled() == false);
+        bool ok = db.openPersistence("/tmp/test_minimadb_persist.db");
+        CHECK(ok == true);
+        CHECK(db.isPersistenceEnabled() == true);
+        // cleanup
+        std::remove("/tmp/test_minimadb_persist.db");
+    }
+
+    TEST_CASE("addBlockWithPersist — stores block in SQLite") {
+        MinimaDB db;
+        db.openPersistence("/tmp/test_minimadb_persist2.db");
+
+        TxPoW b0 = makeTxPoW(0xFF, 0);
+        bool ok = db.addBlockWithPersist(b0);
+        CHECK(ok == true);
+        CHECK(db.currentHeight() == 0);
+
+        // Verify SQLite has the block
+        auto* pbs = db.persistentBlockStore();
+        REQUIRE(pbs != nullptr);
+        CHECK(pbs->count() == 1);
+
+        std::remove("/tmp/test_minimadb_persist2.db");
+    }
+
+    TEST_CASE("bootstrapFromDB — odtwarza drzewo z SQLite") {
+        const std::string dbPath = "/tmp/test_minimadb_bootstrap.db";
+        std::remove(dbPath.c_str());
+
+        // Faza 1: zapisz 3 bloki do DB
+        {
+            MinimaDB db;
+            db.openPersistence(dbPath);
+            TxPoW b0 = makeTxPoW(0xFF, 0); db.addBlockWithPersist(b0);
+            MiniData id0 = db.txPowTree().tip()->txPoWID();
+            TxPoW b1 = makeTxPoW(0xFF, 1, 1); b1.header().superParents[0] = id0; db.addBlockWithPersist(b1);
+            MiniData id1 = db.txPowTree().tip()->txPoWID();
+            TxPoW b2 = makeTxPoW(0xFF, 2, 2); b2.header().superParents[0] = id1; db.addBlockWithPersist(b2);
+            CHECK(db.currentHeight() == 2);
+        }
+
+        // Faza 2: nowa instancja — odtwarza z DB
+        {
+            MinimaDB db2;
+            db2.openPersistence(dbPath);
+            // bootstrapFromDB() wywołane w openPersistence
+            CHECK(db2.currentHeight() == 2);
+            CHECK(db2.txPowTree().size() == 3);
+        }
+
+        std::remove(dbPath.c_str());
+    }
+
+    TEST_CASE("rebuildMMR — MMR odtworzone z canonicalChain") {
+        MinimaDB db;
+        TxPoW b0 = makeTxPoW(0xFF, 0); db.addBlock(b0);
+        MiniData id0 = db.txPowTree().tip()->txPoWID();
+        TxPoW b1 = makeTxPoW(0xFF, 1, 1); b1.header().superParents[0] = id0; db.addBlock(b1);
+
+        // Przed rebuild — MMR może być pusty (nie aktualizowaliśmy go)
+        db.rebuildMMR();
+        // MMR powinien mieć 2 liście (po jednym na blok)
+        // W naszej implementacji każdy blok dodaje 1 leaf
+        // Nie możemy łatwo sprawdzić rozmiaru bez publicznego API — testujemy że nie crashuje
+        CHECK(db.currentHeight() == 1);
+    }
+
+    TEST_CASE("initGenesis — startuje węzeł z genesis") {
+        MinimaDB db;
+        CHECK(db.currentHeight() == 0);
+        CHECK(db.currentTip().has_value() == false);
+
+        bool ok = db.initGenesis();
+        CHECK(ok == true);
+        CHECK(db.currentTip().has_value() == true);
+        CHECK(db.txPowTree().size() == 1);
+
+        // Drugi initGenesis — ignorowany
+        bool ok2 = db.initGenesis();
+        CHECK(ok2 == false);
+        CHECK(db.txPowTree().size() == 1);
+    }
+}
+
+// ── TxPoWProcessor MMR update ─────────────────────────────────────────────────
+TEST_SUITE("TxPoWProcessor_MMR") {
+    TEST_CASE("linear chain — updateMMRIfTip incremental") {
+        using namespace minima::system;
+        MinimaDB db;
+        TxPoWProcessor proc(db);
+        proc.start();
+
+        TxPoW b0 = makeTxPoW(0xFF, 0);
+        auto r0 = proc.submitTxPoWSync(b0);
+        CHECK(r0 == ProcessResult::ACCEPTED);
+
+        MiniData id0 = db.txPowTree().tip()->txPoWID();
+        TxPoW b1 = makeTxPoW(0xFF, 1, 1); b1.header().superParents[0] = id0;
+        auto r1 = proc.submitTxPoWSync(b1);
+        CHECK(r1 == ProcessResult::ACCEPTED);
+        CHECK(db.currentHeight() == 1);
+
+        proc.stop();
     }
 }
