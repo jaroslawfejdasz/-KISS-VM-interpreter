@@ -1,6 +1,6 @@
 {
-  "name": "create-minidapp",
-  "version": "0.1.0",
+  "name": "@jaroslawfejdasz/create-minidapp",
+  "version": "0.1.1",
   "files": [
     "dist",
     "README.md",
