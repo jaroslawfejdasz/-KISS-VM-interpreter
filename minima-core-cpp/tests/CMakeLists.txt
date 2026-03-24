@@ -15,7 +15,7 @@ macro(add_minima_test name sources)
     add_test(NAME ${name} COMMAND ${name})
 endmacro()
 
-# Test suites
+# Core test suites
 add_minima_test(test_mini_number  types/test_mini_number.cpp)
 add_minima_test(test_mini_data    types/test_mini_data.cpp)
 add_minima_test(test_kissvm       kissvm/test_kissvm.cpp)
@@ -28,3 +28,22 @@ add_minima_test(test_mining       mining/test_mining.cpp)
 add_minima_test(test_difficulty   chain/test_difficulty.cpp)
 add_minima_test(test_network      network/test_network.cpp)
 add_minima_test(test_ibd          objects/test_ibd.cpp)
+add_minima_test(test_mempool      mempool/test_mempool.cpp)
+
+# Crypto suites (use real RSA when OpenSSL is enabled)
+add_minima_test(test_rsa          crypto/test_rsa.cpp)
+add_minima_test(test_checksig     crypto/test_checksig_integration.cpp)
+add_minima_test(test_multisig     crypto/test_multisig.cpp)
+
+# When OpenSSL is enabled, explicitly propagate MINIMA_OPENSSL to test targets
+# that use RSA directly (minima-core already links OpenSSL, but test executables
+# may need explicit linkage on some platforms / linker configurations)
+if(MINIMA_CRYPTO_OPENSSL)
+    find_package(OpenSSL REQUIRED)
+    foreach(tgt
+        test_rsa test_checksig test_multisig
+        test_validation test_kissvm)
+        target_link_libraries(${tgt} PRIVATE OpenSSL::Crypto OpenSSL::SSL)
+        target_compile_definitions(${tgt} PRIVATE MINIMA_OPENSSL)
+    endforeach()
+endif()

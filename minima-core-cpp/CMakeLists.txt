@@ -57,7 +57,7 @@ target_include_directories(minima-core PUBLIC
 if(MINIMA_CRYPTO_OPENSSL)
     find_package(OpenSSL REQUIRED)
     target_link_libraries(minima-core PRIVATE OpenSSL::Crypto)
-    target_compile_definitions(minima-core PRIVATE MINIMA_CRYPTO_OPENSSL)
+    target_compile_definitions(minima-core PRIVATE MINIMA_OPENSSL)
     message(STATUS "Minima crypto backend: OpenSSL ${OPENSSL_VERSION}")
 else()
     message(STATUS "Minima crypto backend: reference (pure C++)")

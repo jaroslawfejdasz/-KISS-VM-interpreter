@@ -183,9 +183,10 @@ public:
         // minTxPoWWork = 0xFF...FF, harder target = 0x00...01
         // If newDiff > minTxPoWWork (all 0xFF) → clamp to minTxPoWWork
         // (In practice newDiff should never exceed 0xFF×32 since we multiply avg)
-        const auto& minWork = minTxPoWWork().bytes();
+        // Copy bytes (not reference) to avoid dangling ref to temporary MiniData
+        const std::vector<uint8_t> minWork = minTxPoWWork().bytes();
         bool exceedsMin = false;
-        for (int i = 0; i < 32; ++i) {
+        for (int i = 0; i < (int)std::min(newDiffBytes.size(), minWork.size()); ++i) {
             if (newDiffBytes[i] > minWork[i]) { exceedsMin = true; break; }
             if (newDiffBytes[i] < minWork[i]) break;
         }
