@@ -41,6 +41,10 @@ static constexpr int CASCADE_LEVEL_NODES = 1;   // nodes per level
 class Cascade {
 public:
     Cascade() = default;
+    Cascade(const Cascade&) = delete;
+    Cascade& operator=(const Cascade&) = delete;
+    Cascade(Cascade&&) = default;
+    Cascade& operator=(Cascade&&) = default;
 
     // ── Add new block to tip ──────────────────────────────────────────────
     void addToTip(const TxPoW& txpow) {

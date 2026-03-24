@@ -73,6 +73,12 @@ struct NetworkEvent {
     std::optional<MiniNumber> blockHeight;
     std::optional<MiniData>   txpowId;
     std::optional<IBD>        ibd;
+
+    NetworkEvent() = default;
+    NetworkEvent(const NetworkEvent&) = delete;
+    NetworkEvent& operator=(const NetworkEvent&) = delete;
+    NetworkEvent(NetworkEvent&&) = default;
+    NetworkEvent& operator=(NetworkEvent&&) = default;
 };
 
 // ── Protocol state machine for one connection ─────────────────────────────────

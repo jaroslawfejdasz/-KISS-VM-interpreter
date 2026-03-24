@@ -27,6 +27,10 @@ static constexpr int IBD_MAX_BLOCKS = 34000;
 class IBD {
 public:
     IBD() = default;
+    IBD(const IBD&) = delete;
+    IBD& operator=(const IBD&) = delete;
+    IBD(IBD&&) = default;
+    IBD& operator=(IBD&&) = default;
 
     // ── Accessors ─────────────────────────────────────────────────────────
     const std::vector<TxBlock>& txBlocks() const { return m_txBlocks; }
