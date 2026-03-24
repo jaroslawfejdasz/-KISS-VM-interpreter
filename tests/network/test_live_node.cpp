@@ -356,7 +356,7 @@ TEST_SUITE("LiveNode_NIO") {
                         
                         if (bodyFlag) {
                             std::cout << "[DBG] Parsing TxBody...\n";
-                            TxBody body = TxBody::deserialise(rawPayload.data(), txOffset);
+                            TxBody body = TxBody::deserialise(rawPayload.data(), txOffset, rawPayload.size());
                             std::cout << "[DBG] TxBody OK, offset=" << txOffset << "\n";
                         }
                     }
