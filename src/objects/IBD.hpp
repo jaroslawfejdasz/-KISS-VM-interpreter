@@ -6,16 +6,18 @@
  *
  * Wire format:
  *   [1 byte: hasCascade (0/1)]
- *   [if cascade: cascade bytes — TODO: Cascade not yet impl, always false]
+ *   [if cascade: Cascade wire bytes — [MiniNumber numNodes][CascadeNode × N]]
  *   [MiniNumber: numBlocks]
  *   [for each block: TxBlock bytes]
  */
 #include "TxBlock.hpp"
 #include "../types/MiniNumber.hpp"
 #include "../serialization/DataStream.hpp"
+#include "../chain/cascade/Cascade.hpp"
 #include <vector>
 #include <cstdint>
 #include <stdexcept>
+#include <optional>
 
 namespace minima {
 
@@ -26,13 +28,30 @@ class IBD {
 public:
     IBD() = default;
 
-    // ── Accessors ─────────────────────────────────────────────────────────────
+    // ── Accessors ─────────────────────────────────────────────────────────
     const std::vector<TxBlock>& txBlocks() const { return m_txBlocks; }
     std::vector<TxBlock>&       txBlocks()       { return m_txBlocks; }
+
     bool hasCascade() const { return m_hasCascade; }
 
+    const cascade::Cascade* cascade() const {
+        return m_cascade.has_value() ? &m_cascade.value() : nullptr;
+    }
+    cascade::Cascade* cascade() {
+        return m_cascade.has_value() ? &m_cascade.value() : nullptr;
+    }
+
+    void setCascade(cascade::Cascade c) {
+        m_cascade    = std::move(c);
+        m_hasCascade = true;
+    }
+    void clearCascade() {
+        m_cascade.reset();
+        m_hasCascade = false;
+    }
+
     void addBlock(TxBlock b) {
-        if ((int)m_txBlocks.size() >= IBD_MAX_BLOCKS)
+        if (static_cast<int>(m_txBlocks.size()) >= IBD_MAX_BLOCKS)
             throw std::runtime_error("IBD: max blocks exceeded");
         m_txBlocks.push_back(std::move(b));
     }
@@ -47,16 +66,27 @@ public:
         return m_txBlocks.back().txpow().header().blockNumber;
     }
 
-    // ── Serialise ─────────────────────────────────────────────────────────────
-    // [1 byte hasCascade][MiniNumber numBlocks][blocks...]
+    // ── Serialise ─────────────────────────────────────────────────────────
+    // [1 byte hasCascade]
+    // [if cascade: Cascade bytes]
+    // [MiniNumber numBlocks]
+    // [TxBlock × numBlocks]
     std::vector<uint8_t> serialise() const {
         std::vector<uint8_t> out;
-        // hasCascade flag (always false in current implementation)
+
+        // hasCascade flag
         out.push_back(m_hasCascade ? 0x01 : 0x00);
+
+        // Cascade bytes (only if present)
+        if (m_hasCascade && m_cascade.has_value()) {
+            auto cb = m_cascade->serialise();
+            out.insert(out.end(), cb.begin(), cb.end());
+        }
+
         // numBlocks as MiniNumber
-        MiniNumber numBlocks(int64_t(m_txBlocks.size()));
-        auto nb = numBlocks.serialise();
+        auto nb = MiniNumber(static_cast<int64_t>(m_txBlocks.size())).serialise();
         out.insert(out.end(), nb.begin(), nb.end());
+
         // each TxBlock
         for (const auto& tb : m_txBlocks) {
             auto tb_bytes = tb.serialise();
@@ -70,19 +100,23 @@ public:
             throw std::runtime_error("IBD: empty data");
         IBD ibd;
 
-        // hasCascade
+        // hasCascade byte
         ibd.m_hasCascade = (data[offset++] != 0x00);
+
         if (ibd.m_hasCascade) {
-            // TODO: Cascade not yet implemented — skip gracefully
-            // For now, throw so we know if we ever receive one
-            throw std::runtime_error("IBD: Cascade deserialization not yet implemented");
+            // Deserialise the Cascade
+            // Cascade wire: [MiniNumber numNodes][CascadeNode × numNodes]
+            std::vector<uint8_t> buf(data + offset, data + maxSize);
+            size_t localOff = 0;
+            ibd.m_cascade = cascade::Cascade::deserialise(buf, localOff);
+            offset += localOff;
         }
 
         // numBlocks
         MiniNumber numBlocks = MiniNumber::deserialise(data, offset);
-        int count = numBlocks.getAsInt();
+        int count = static_cast<int>(numBlocks.getAsLong());
         if (count < 0 || count > IBD_MAX_BLOCKS)
-            throw std::runtime_error("IBD: invalid block count");
+            throw std::runtime_error("IBD: invalid block count " + std::to_string(count));
 
         for (int i = 0; i < count; ++i) {
             TxBlock tb = TxBlock::deserialise(data, offset, maxSize);
@@ -96,16 +130,21 @@ public:
         return deserialise(data.data(), off, data.size());
     }
 
-    // ── Weight calculation (for chain selection) ──────────────────────────────
-    // Sum of difficulty values (higher = harder chain = more weight)
-    // In Minima: difficulty is inverted — smaller value = more work done
-    // So "heavier chain" = sum of (1 / difficulty) — but we approximate
-    // by counting blocks as a simple weight proxy
+    // ── Weight (for chain selection) ──────────────────────────────────────
     size_t blockCount() const { return m_txBlocks.size(); }
 
+    // Total chain weight = cascade weight + block count
+    double totalWeight() const {
+        double w = static_cast<double>(m_txBlocks.size());
+        if (m_hasCascade && m_cascade.has_value())
+            w += m_cascade->totalWeight();
+        return w;
+    }
+
 private:
-    bool                m_hasCascade = false;
-    std::vector<TxBlock> m_txBlocks;
+    bool                           m_hasCascade = false;
+    std::optional<cascade::Cascade> m_cascade;
+    std::vector<TxBlock>           m_txBlocks;
 };
 
 } // namespace minima
