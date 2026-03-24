@@ -11,6 +11,7 @@
 #include "../../src/objects/TxBlock.hpp"
 #include "../../src/chain/ChainProcessor.hpp"
 #include "../../src/chain/UTxOSet.hpp"
+#include "../../src/chain/cascade/Cascade.hpp"
 
 #include <thread>
 #include <atomic>
@@ -326,4 +327,176 @@ TEST_CASE("P2PSync: setLocalTip and localTipBlock") {
     CHECK(sync.localTipBlock() == 42);
     sync.setLocalTip(0);
     CHECK(sync.localTipBlock() == 0);
+}
+
+
+// ── Cascade + IBD integration tests ──────────────────────────────────────────
+
+namespace {
+
+static TxPoW makeCascadeTxPoW(int64_t blockNum) {
+    TxPoW txp;
+    txp.header().blockNumber = MiniNumber(blockNum);
+    MiniData zeroHash(std::vector<uint8_t>(32, 0x00));
+    for (int i = 0; i < 32; ++i)
+        txp.header().superParents[i] = zeroHash;
+    return txp;
+}
+
+static TxBlock makeCascadeBlock(int64_t blockNum) {
+    TxPoW tx;
+    tx.header().blockNumber = MiniNumber(blockNum);
+    tx.header().timeMilli   = MiniNumber(int64_t(1700000000000LL + blockNum * 1000));
+    return TxBlock(tx);
+}
+
+// Build IBD payload: cascade [cascFrom..cascTo] + blocks [blkFrom..blkTo]
+// blkFrom > blkTo → no blocks
+static std::vector<uint8_t> ibdWithCascadePayload(
+    int64_t cascFrom, int64_t cascTo,
+    int64_t blkFrom,  int64_t blkTo)
+{
+    IBD ibd;
+    cascade::Cascade c;
+    for (int64_t i = cascFrom; i <= cascTo; ++i)
+        c.addToTip(makeCascadeTxPoW(i));
+    ibd.setCascade(std::move(c));
+    for (int64_t i = blkFrom; i <= blkTo; ++i)
+        ibd.addBlock(makeCascadeBlock(i));
+    return ibd.serialise();
+}
+
+} // anonymous namespace
+
+TEST_CASE("ChainProcessor: applyCascade sets height and cascadeRoot") {
+    ChainProcessor chain;
+    CHECK_FALSE(chain.hasCascadeBootstrap());
+    CHECK(chain.cascadeRoot() == -1);
+
+    cascade::Cascade c;
+    for (int64_t i = 1; i <= 10; ++i)
+        c.addToTip(makeCascadeTxPoW(i));
+
+    chain.applyCascade(c);
+
+    CHECK(chain.hasCascadeBootstrap());
+    CHECK(chain.getHeight() == 10);
+    CHECK(chain.cascadeRoot() == 1);
+}
+
+TEST_CASE("ChainProcessor: applyCascade ignored if cascade tip <= current height") {
+    ChainProcessor chain;
+
+    cascade::Cascade c1;
+    for (int64_t i = 1; i <= 100; ++i)
+        c1.addToTip(makeCascadeTxPoW(i));
+    chain.applyCascade(c1);
+    CHECK(chain.getHeight() == 100);
+
+    // Shorter cascade — must NOT downgrade the chain
+    cascade::Cascade c2;
+    for (int64_t i = 1; i <= 50; ++i)
+        c2.addToTip(makeCascadeTxPoW(i));
+    chain.applyCascade(c2);
+
+    CHECK(chain.getHeight() == 100);
+}
+
+TEST_CASE("IBD: deserialise with cascade no longer throws") {
+    IBD orig;
+    cascade::Cascade c;
+    c.addToTip(makeCascadeTxPoW(1));
+    c.addToTip(makeCascadeTxPoW(2));
+    orig.setCascade(std::move(c));
+    orig.addBlock(makeCascadeBlock(3));
+
+    auto bytes = orig.serialise();
+    REQUIRE(bytes[0] == 0x01);  // hasCascade flag
+
+    // Must NOT throw
+    CHECK_NOTHROW(IBD::deserialise(bytes));
+
+    IBD restored = IBD::deserialise(bytes);
+    CHECK(restored.hasCascade());
+    CHECK(restored.cascade() != nullptr);
+    CHECK(restored.cascade()->length() == 2);
+    CHECK(restored.blockCount() == 1);
+}
+
+TEST_CASE("P2PSync: IBD with cascade — chain bootstrapped to cascade tip") {
+    uint16_t port = findFreePort();
+    NIOServer server(port);
+    server.bind();
+
+    std::thread srv([&]() {
+        server.acceptOne([](NIOClient& peer) {
+            peer.receive();  // consume client greeting
+            peer.send(NIOMsg{MsgType::GREETING, greetingPayload(200)});
+            auto req = peer.receive();
+            if (req.type == MsgType::IBD_REQ) {
+                // cascade [1..150] + blocks [151..200]
+                auto payload = ibdWithCascadePayload(1, 150, 151, 200);
+                peer.send(NIOMsg{MsgType::IBD, payload});
+            }
+        });
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+    ChainProcessor chain; UTxOSet utxo;
+    P2PSync::Config cfg;
+    cfg.host = "127.0.0.1"; cfg.port = port; cfg.recvTimeout = 2000;
+
+    P2PSync sync(cfg, chain, utxo);
+    sync.setLocalTip(0);
+    sync.setLogger([](const std::string&){});
+
+    sync.connect();
+    sync.doHandshake();
+    sync.doIBD();
+
+    // cascade tip=150 bootstrapped; blocks 151-200 applied on top
+    CHECK(chain.getHeight() >= 150);
+    CHECK(chain.hasCascadeBootstrap());
+    CHECK(chain.cascadeRoot() == 1);
+
+    srv.join();
+    server.stop();
+}
+
+TEST_CASE("P2PSync: IBD with cascade-only response (no extra blocks)") {
+    uint16_t port = findFreePort();
+    NIOServer server(port);
+    server.bind();
+
+    std::thread srv([&]() {
+        server.acceptOne([](NIOClient& peer) {
+            peer.receive();
+            peer.send(NIOMsg{MsgType::GREETING, greetingPayload(50)});
+            auto req = peer.receive();
+            if (req.type == MsgType::IBD_REQ) {
+                // cascade only — blkFrom > blkTo = 0 blocks
+                auto payload = ibdWithCascadePayload(1, 50, 51, 0);
+                peer.send(NIOMsg{MsgType::IBD, payload});
+            }
+        });
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+    ChainProcessor chain; UTxOSet utxo;
+    P2PSync::Config cfg;
+    cfg.host = "127.0.0.1"; cfg.port = port; cfg.recvTimeout = 2000;
+
+    P2PSync sync(cfg, chain, utxo);
+    sync.setLocalTip(0);
+    sync.setLogger([](const std::string&){});
+
+    sync.connect();
+    sync.doHandshake();
+    sync.doIBD();
+
+    CHECK(chain.hasCascadeBootstrap());
+    CHECK(chain.getHeight() == 50);
+
+    srv.join();
+    server.stop();
 }

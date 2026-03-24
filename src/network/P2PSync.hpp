@@ -268,6 +268,17 @@ private:
         size_t off = 0;
         try {
             IBD ibd = IBD::deserialise(payload.data(), off, payload.size());
+
+            // ── Apply Cascade first (if present) ─────────────────────────
+            if (ibd.hasCascade() && ibd.cascade()) {
+                chain_.applyCascade(*ibd.cascade());
+                log("  cascade: " +
+                    std::to_string(ibd.cascade()->length()) + " nodes" +
+                    " tip=" + std::to_string(ibd.cascade()->tipBlock()) +
+                    " root=" + std::to_string(ibd.cascade()->rootBlock()));
+            }
+
+            // ── Apply blocks ──────────────────────────────────────────────
             int64_t n = 0;
             for (auto& blk : ibd.txBlocks()) {
                 chain_.processBlock(blk.txpow());
@@ -281,7 +292,6 @@ private:
             return 0;
         }
     }
-
     void log(const std::string& msg) {
         if (logger_) logger_(msg);
         else std::cout << "[P2PSync] " << msg << "\n";
