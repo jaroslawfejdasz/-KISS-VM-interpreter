@@ -1,19 +1,17 @@
-# Tests — using a lightweight single-header framework (doctest)
-# Fetch doctest via CMake FetchContent (no external install needed)
+# Tests — lightweight single-header framework (doctest)
+# Uses vendored copy in tests/vendor/doctest/ — no network required in CI
 
-include(FetchContent)
-FetchContent_Declare(
-    doctest
-    GIT_REPOSITORY https://github.com/doctest/doctest.git
-    GIT_TAG        v2.4.11
-)
-FetchContent_MakeAvailable(doctest)
+add_library(doctest_interface INTERFACE)
+target_include_directories(doctest_interface INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 
 # Helper macro to register a test executable
 macro(add_minima_test name sources)
     add_executable(${name} ${sources})
-    target_link_libraries(${name} PRIVATE minima-core doctest::doctest)
-    target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(${name} PRIVATE minima-core doctest_interface)
+    target_include_directories(${name} PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
     add_test(NAME ${name} COMMAND ${name})
 endmacro()
 
@@ -25,12 +23,8 @@ add_minima_test(test_txpow        objects/test_txpow.cpp)
 add_minima_test(test_validation   validation/test_validation.cpp)
 add_minima_test(test_mmr          mmr/test_mmr.cpp)
 add_minima_test(test_chain        chain/test_chain.cpp)
-
-# New modules
-add_minima_test(test_token   objects/test_token.cpp)
-add_minima_test(test_mining  mining/test_mining.cpp)
-
-add_minima_test(test_difficulty chain/test_difficulty.cpp)
-
-add_minima_test(test_network network/test_network.cpp)
-add_minima_test(test_ibd objects/test_ibd.cpp)
+add_minima_test(test_token        objects/test_token.cpp)
+add_minima_test(test_mining       mining/test_mining.cpp)
+add_minima_test(test_difficulty   chain/test_difficulty.cpp)
+add_minima_test(test_network      network/test_network.cpp)
+add_minima_test(test_ibd          objects/test_ibd.cpp)

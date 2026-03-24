@@ -36,6 +36,7 @@ add_library(minima-core STATIC
 
     src/crypto/Hash.cpp
     src/crypto/RSA.cpp
+    src/crypto/Schnorr.cpp
     src/objects/Magic.cpp
 
     src/serialization/DataStream.cpp

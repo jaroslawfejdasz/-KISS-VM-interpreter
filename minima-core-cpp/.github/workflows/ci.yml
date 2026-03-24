@@ -8,12 +8,24 @@ on:
 
 jobs:
   build-and-test:
-    name: Build & Test (${{ matrix.os }})
+    name: Build & Test (${{ matrix.os }} / ${{ matrix.compiler }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        include:
+          - os: ubuntu-22.04
+            compiler: gcc
+            cc: gcc-12
+            cxx: g++-12
+          - os: ubuntu-24.04
+            compiler: gcc
+            cc: gcc-13
+            cxx: g++-13
+          - os: ubuntu-22.04
+            compiler: clang
+            cc: clang-15
+            cxx: clang++-15
 
     steps:
       - uses: actions/checkout@v4
@@ -21,47 +33,45 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y cmake build-essential ninja-build
+          sudo apt-get install -y cmake build-essential ninja-build \
+            gcc-12 g++-12 2>/dev/null || true
+          if [[ "${{ matrix.compiler }}" == "clang" ]]; then
+            sudo apt-get install -y clang-15 2>/dev/null || \
+            sudo apt-get install -y clang 2>/dev/null || true
+          fi
 
-      - name: Configure (CMake)
+      - name: Configure
+        working-directory: minima-core-cpp
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DMINIMA_BUILD_TESTS=ON \
             -DMINIMA_CRYPTO_OPENSSL=OFF \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -G Ninja
 
       - name: Build
+        working-directory: minima-core-cpp
         run: cmake --build build --parallel
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        working-directory: minima-core-cpp
+        run: ctest --test-dir build --output-on-failure --parallel 4
 
-  clang-build:
-    name: Build (clang, Ubuntu 22.04)
-    runs-on: ubuntu-22.04
-
+  # Summary badge job
+  ci-status:
+    name: CI Status
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: always()
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
+      - name: Report
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y cmake clang-15 ninja-build
-
-      - name: Configure (Clang)
-        run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER=clang++-15 \
-            -DMINIMA_BUILD_TESTS=ON \
-            -DMINIMA_CRYPTO_OPENSSL=OFF \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-            -G Ninja
-
-      - name: Build
-        run: cmake --build build --parallel
-
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+          if [[ "${{ needs.build-and-test.result }}" == "success" ]]; then
+            echo "✅ All builds and tests passed"
+          else
+            echo "❌ Build or test failure detected"
+            exit 1
+          fi
