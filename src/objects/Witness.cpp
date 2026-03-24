@@ -79,7 +79,7 @@ std::vector<uint8_t> Witness::serialise() const {
 }
 
 // ── Witness deserialise ───────────────────────────────────────────────────
-Witness Witness::deserialise(const uint8_t* data, size_t& offset) {
+Witness Witness::deserialise(const uint8_t* data, size_t& offset, size_t total_size) {
     Witness w;
 
     // Signatures
@@ -88,11 +88,11 @@ Witness Witness::deserialise(const uint8_t* data, size_t& offset) {
     for (int64_t i = 0; i < sigCount; ++i)
         w.m_signatures.push_back(Signature::deserialise(data, offset));
 
-    // CoinProofs
+    // CoinProofs — pass total_size so MMRProof can do safe bounds-checked read
     int64_t cpCount = MiniNumber::deserialise(data, offset).getAsLong();
     w.m_coinProofs.reserve(static_cast<size_t>(cpCount));
     for (int64_t i = 0; i < cpCount; ++i)
-        w.m_coinProofs.push_back(CoinProof::deserialise(data, offset));
+        w.m_coinProofs.push_back(CoinProof::deserialise(data, offset, total_size));
 
     // ScriptProofs
     int64_t spCount = MiniNumber::deserialise(data, offset).getAsLong();
@@ -101,6 +101,11 @@ Witness Witness::deserialise(const uint8_t* data, size_t& offset) {
         w.m_scripts.push_back(ScriptProof::deserialise(data, offset));
 
     return w;
+}
+
+// backward compat — no total_size
+Witness Witness::deserialise(const uint8_t* data, size_t& offset) {
+    return deserialise(data, offset, SIZE_MAX);
 }
 
 // ── scriptForAddress ──────────────────────────────────────────────────────

@@ -54,6 +54,7 @@ public:
     // Convenience wrappers for byte-vector based serialisation
     std::vector<uint8_t> serialise() const;
     static MMRProof deserialise(const uint8_t* data, size_t& offset);
+    static MMRProof deserialise(const uint8_t* data, size_t& offset, size_t total_size);
 
 private:
     uint64_t             m_blocktime{0};

@@ -44,7 +44,7 @@ public:
         return out;
     }
 
-    // 2-arg: MMRProof reads its own length
+    // 2-arg: MMRProof reads its own length (no bounds check beyond MMRProof internal cap)
     static CoinProof deserialise(const uint8_t* data, size_t& offset) {
         CoinProof cp;
         cp.m_coin  = Coin::deserialise(data, offset);
@@ -52,9 +52,12 @@ public:
         return cp;
     }
 
-    // 3-arg backward compat
-    static CoinProof deserialise(const uint8_t* data, size_t& offset, size_t /*totalLen*/) {
-        return deserialise(data, offset);
+    // 3-arg: pass total buffer size for safe MMRProof deserialization
+    static CoinProof deserialise(const uint8_t* data, size_t& offset, size_t totalLen) {
+        CoinProof cp;
+        cp.m_coin  = Coin::deserialise(data, offset);
+        cp.m_proof = MMRProof::deserialise(data, offset, totalLen);
+        return cp;
     }
 
 private:

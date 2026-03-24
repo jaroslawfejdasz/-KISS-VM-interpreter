@@ -116,8 +116,21 @@ std::vector<uint8_t> MMRProof::serialise() const {
     return ds.buffer();
 }
 
+MMRProof MMRProof::deserialise(const uint8_t* data, size_t& offset, size_t total_size) {
+    // Use remaining bytes from offset to end of buffer — never read past end.
+    size_t avail = (total_size > offset) ? (total_size - offset) : 0;
+    DataStream ds(data + offset, avail);
+    MMRProof proof;
+    proof.deserialise(ds);
+    offset += ds.position();
+    return proof;
+}
+
+// Backward-compat overload — caller doesn't know total size; use generous cap.
 MMRProof MMRProof::deserialise(const uint8_t* data, size_t& offset) {
-    constexpr size_t MAX_PROOF = 16 * 1024;
+    // We don't know the true buffer size here. Use MAX_PROOF as a safe upper
+    // bound; real bounds checking happens inside DataStream::readBytes().
+    constexpr size_t MAX_PROOF = 64 * 1024;
     DataStream ds(data + offset, MAX_PROOF);
     MMRProof proof;
     proof.deserialise(ds);
