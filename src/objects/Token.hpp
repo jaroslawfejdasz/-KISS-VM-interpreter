@@ -1,128 +1,129 @@
 #pragma once
-/**
- * Token — custom token on Minima.
- *
- * Java ref: src/org/minima/objects/Token.java
- *
- * Wire format (writeDataStream):
- *   coinID          (MiniData — writeHashToStream = 32 raw bytes)
- *   tokenScript     (MiniString — 2-byte len + UTF-8)
- *   tokenScale      (MiniNumber — len-prefixed decimal)
- *   tokenMinimaAmt  (MiniNumber)
- *   tokenName       (MiniString)
- *   tokenCreated    (MiniNumber — block number)
- *
- * TokenID = SHA3(serialised bytes)
- */
 #include "../types/MiniData.hpp"
 #include "../types/MiniNumber.hpp"
 #include "../types/MiniString.hpp"
 #include "../crypto/Hash.hpp"
 #include <vector>
-#include <cstdint>
-#include <cstring>
+#include <string>
 
 namespace minima {
 
+/**
+ * Token — custom token on Minima.
+ *
+ * Wire format (Java Token.writeDataStream):
+ *   tokenID     : MiniData
+ *   coinID      : MiniData
+ *   totalSupply : MiniNumber
+ *   scale       : MiniNumber
+ *   name        : MiniString
+ *   description : MiniString
+ *   script      : MiniString  (KISS VM script text)
+ */
 class Token {
 public:
-    // ── Special token IDs ──────────────────────────────────────────────────
     static MiniData TOKENID_MINIMA() { return MiniData(std::vector<uint8_t>{0x00}); }
     static MiniData TOKENID_CREATE() { return MiniData(std::vector<uint8_t>{0xFF}); }
 
-    // ── Constructors ───────────────────────────────────────────────────────
     Token() = default;
 
-    Token(const MiniData&   coinID,
-          const MiniNumber& scale,
-          const MiniNumber& minimaAmount,
-          const MiniString& name,
-          const MiniString& script,
-          const MiniNumber& created = MiniNumber(int64_t(0)))
-        : m_coinID(coinID)
-        , m_tokenScale(scale)
-        , m_tokenMinimaAmount(minimaAmount)
-        , m_tokenName(name)
-        , m_tokenScript(script)
-        , m_tokenCreated(created)
+    // Convenience constructor (coinID, scale, minimaAmount, name, script, [created])
+    Token(const MiniData&   coinID_,
+          const MiniNumber& scale_,
+          const MiniNumber& minimaAmount_,
+          const MiniString& name_,
+          const MiniString& script_,
+          const MiniNumber& created_ = MiniNumber(int64_t(0)))
+        : m_coinID(coinID_)
+        , m_scale(scale_)
+        , m_totalSupply(minimaAmount_)
+        , m_name(name_)
+        , m_description(MiniString(""))
+        , m_script(script_)
+        , m_created(created_)
     {
-        calculateTokenID();
+        computeTokenID();
     }
 
     // ── Getters ────────────────────────────────────────────────────────────
-    const MiniData&   coinID()       const { return m_coinID; }
     const MiniData&   tokenID()      const { return m_tokenID; }
-    const MiniNumber& scale()        const { return m_tokenScale; }
-    const MiniNumber& minimaAmount() const { return m_tokenMinimaAmount; }
-    const MiniString& name()         const { return m_tokenName; }
-    const MiniString& script()       const { return m_tokenScript; }
-    const MiniNumber& createdBlock() const { return m_tokenCreated; }
+    const MiniData&   coinID()       const { return m_coinID; }
+    const MiniNumber& totalSupply()  const { return m_totalSupply; }
+    const MiniNumber& minimaAmount() const { return m_totalSupply; }
+    const MiniNumber& scale()        const { return m_scale; }
+    const MiniString& name()         const { return m_name; }
+    const MiniString& description()  const { return m_description; }
+    const MiniString& script()       const { return m_script; }
+    const MiniNumber& createdBlock() const { return m_created; }
 
-    // ── Scale helpers ──────────────────────────────────────────────────────
-    MiniNumber getScaledTokenAmount(const MiniNumber& minimaAmt) const {
-        int64_t sc = m_tokenScale.getAsLong();
-        MiniNumber cur = minimaAmt;
+    // ── Setters ────────────────────────────────────────────────────────────
+    Token& setTokenID    (const MiniData&   v) { m_tokenID     = v; return *this; }
+    Token& setCoinID     (const MiniData&   v) { m_coinID      = v; return *this; }
+    Token& setTotalSupply(const MiniNumber& v) { m_totalSupply = v; return *this; }
+    Token& setScale      (const MiniNumber& v) { m_scale       = v; return *this; }
+    Token& setName       (const MiniString& v) { m_name        = v; return *this; }
+    Token& setDescription(const MiniString& v) { m_description = v; return *this; }
+    Token& setScript     (const MiniString& v) { m_script      = v; computeTokenID(); return *this; }
+    Token& setCreated    (const MiniNumber& v) { m_created     = v; return *this; }
+
+    // ── Derived ────────────────────────────────────────────────────────────
+    MiniNumber totalTokens() const {
+        int64_t sc = m_scale.getAsLong();
+        MiniNumber cur = m_totalSupply;
         for (int64_t i = 0; i < sc; ++i) cur = cur * MiniNumber(int64_t(10));
         return cur;
     }
-    MiniNumber getScaledMinimaAmount(const MiniNumber& tokenAmt) const {
-        int64_t sc = m_tokenScale.getAsLong();
-        MiniNumber cur = tokenAmt;
-        for (int64_t i = 0; i < sc; ++i) cur = cur / MiniNumber(int64_t(10));
-        return cur;
-    }
-    MiniNumber totalTokens() const { return getScaledTokenAmount(m_tokenMinimaAmount); }
 
-    // ── Serialisation (wire-exact Java order) ─────────────────────────────
+    // ── Serialisation ─────────────────────────────────────────────────────
     std::vector<uint8_t> serialise() const {
         std::vector<uint8_t> out;
-        auto append = [&](const std::vector<uint8_t>& v) {
+        auto app = [&](const std::vector<uint8_t>& v){
             out.insert(out.end(), v.begin(), v.end());
         };
-        // Java: mCoinID.writeHashToStream → 32 raw bytes
-        auto coinBytes = m_coinID.bytes();
-        coinBytes.resize(32, 0x00);
-        out.insert(out.end(), coinBytes.begin(), coinBytes.end());
-        append(m_tokenScript.serialise());
-        append(m_tokenScale.serialise());
-        append(m_tokenMinimaAmount.serialise());
-        append(m_tokenName.serialise());
-        append(m_tokenCreated.serialise());
+        app(m_tokenID.serialise());
+        app(m_coinID.serialise());
+        app(m_totalSupply.serialise());
+        app(m_scale.serialise());
+        app(m_name.serialise());
+        app(m_description.serialise());
+        app(m_script.serialise());
         return out;
     }
 
     static Token deserialise(const uint8_t* data, size_t& offset) {
         Token t;
-        // coinID: 32 raw bytes
-        std::vector<uint8_t> coinBytes(data + offset, data + offset + 32);
-        t.m_coinID = MiniData(coinBytes);
-        offset += 32;
-        t.m_tokenScript       = MiniString::deserialise(data, offset);
-        t.m_tokenScale        = MiniNumber::deserialise(data, offset);
-        t.m_tokenMinimaAmount = MiniNumber::deserialise(data, offset);
-        t.m_tokenName         = MiniString::deserialise(data, offset);
-        t.m_tokenCreated      = MiniNumber::deserialise(data, offset);
-        t.calculateTokenID();
+        t.m_tokenID     = MiniData::deserialise(data, offset);
+        t.m_coinID      = MiniData::deserialise(data, offset);
+        t.m_totalSupply = MiniNumber::deserialise(data, offset);
+        t.m_scale       = MiniNumber::deserialise(data, offset);
+        t.m_name        = MiniString::deserialise(data, offset);
+        t.m_description = MiniString::deserialise(data, offset);
+        t.m_script      = MiniString::deserialise(data, offset);
         return t;
     }
 
-    bool operator==(const Token& rhs) const {
-        return m_tokenID.bytes() == rhs.m_tokenID.bytes();
+    bool operator==(const Token& o) const {
+        return m_tokenID.bytes() == o.m_tokenID.bytes();
     }
-    bool operator!=(const Token& rhs) const { return !(*this == rhs); }
+    bool operator!=(const Token& o) const { return !(*this == o); }
 
 private:
+    MiniData   m_tokenID;
     MiniData   m_coinID;
-    MiniNumber m_tokenScale   {int64_t(0)};
-    MiniNumber m_tokenMinimaAmount{int64_t(0)};
-    MiniString m_tokenName;
-    MiniString m_tokenScript;
-    MiniNumber m_tokenCreated {int64_t(0)};
-    MiniData   m_tokenID;   // computed, not serialised
+    MiniNumber m_totalSupply;
+    MiniNumber m_scale;
+    MiniString m_name;
+    MiniString m_description;
+    MiniString m_script;
+    MiniNumber m_created;
 
-    void calculateTokenID() {
+    void computeTokenID() {
         auto raw = serialise();
-        m_tokenID = MiniData(crypto::Hash::sha3_256(raw));
+        // tokenID = SHA3 of everything except the first field (tokenID itself)
+        // First field is MiniData m_tokenID: 4 bytes len + m_tokenID.size() bytes
+        size_t skip = 4 + m_tokenID.size();
+        if (raw.size() > skip)
+            m_tokenID = crypto::Hash::sha3_256(raw.data() + skip, raw.size() - skip);
     }
 };
 
