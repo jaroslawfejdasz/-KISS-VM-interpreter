@@ -21,7 +21,7 @@ export class Environment {
   }
 
   setVariable(name: string, value: MiniValue) {
-    this.variables.set(name, value);
+    this.variables.set(name.toUpperCase(), value);
   }
 
   getVariable(name: string): MiniValue {
@@ -30,14 +30,14 @@ export class Environment {
       if (!v) throw new Error(`Global variable not found: ${name}`);
       return v;
     }
-    const v = this.variables.get(name);
+    const v = this.variables.get(name.toUpperCase());
     if (v === undefined) throw new Error(`Variable not found: ${name}`);
     return v;
   }
 
   hasVariable(name: string): boolean {
     if (name.startsWith('@')) return this.globals.has(name);
-    return this.variables.has(name);
+    return this.variables.has(name.toUpperCase());
   }
 
   tick() {

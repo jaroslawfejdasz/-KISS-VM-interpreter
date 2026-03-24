@@ -1,8 +1,14 @@
 {
   "name": "minima-test",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Testing framework for Minima KISS VM smart contracts",
-  "keywords": ["minima", "blockchain", "kissvm", "testing", "smart-contracts"],
+  "keywords": [
+    "minima",
+    "blockchain",
+    "kissvm",
+    "testing",
+    "smart-contracts"
+  ],
   "author": "Jaroslaw Fejdasz",
   "license": "MIT",
   "repository": {

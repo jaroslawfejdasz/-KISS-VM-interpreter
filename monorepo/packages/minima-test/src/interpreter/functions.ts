@@ -14,7 +14,13 @@ const FUNCTIONS: Record<string, FnImpl> = {
     if (a.type === 'STRING') return MiniValue.hex(Buffer.from(a.raw, 'utf8').toString('hex'));
     return MiniValue.hex(a.raw);
   },
-  STRING: ([a]) => MiniValue.string(a.asString()),
+  STRING: ([a]) => {
+    if (a.type === 'HEX') {
+      const hex = a.raw.replace(/^0x/i, '');
+      return MiniValue.string(Buffer.from(hex, 'hex').toString('utf8'));
+    }
+    return MiniValue.string(a.asString());
+  },
   ASCII: ([a]) => {
     if (a.type === 'HEX') {
       const hex = a.raw.replace('0x', '');
@@ -63,8 +69,11 @@ const FUNCTIONS: Record<string, FnImpl> = {
   POW: ([a, b]) => MiniValue.number(Math.pow(a.asNumber(), b.asNumber())),
   SQRT: ([a]) => MiniValue.number(Math.sqrt(a.asNumber())),
   SIGDIG: ([a, b]) => {
+    // SIGDIG(n, digits) — round n to `digits` significant figures
+    // e.g. SIGDIG(3.14159, 3) = 3.14, SIGDIG(12345, 5) = 12345
     const n = a.asNumber();
     const digits = b.asNumber();
+    if (n === 0) return MiniValue.number(0);
     return MiniValue.number(parseFloat(n.toPrecision(digits)));
   },
 

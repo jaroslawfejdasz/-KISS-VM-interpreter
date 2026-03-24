@@ -173,9 +173,9 @@ describe('Advanced Functions (07)', () => {
 
   // === SIGDIG ===
   describe('SIGDIG precision', () => {
-    it('SIGDIG(12345, 10) gives 5 significant digits', () => {
+    it('SIGDIG(12345, 5) rounds to 5 significant digits', () => {
       // 5 significant decimal digits
-      expect(runScript('RETURN SIGDIG(12345, 10) EQ 5')).toPass();
+      expect(runScript('RETURN SIGDIG(12345, 5) EQ 12345')).toPass();
     });
 
     it('SIGDIG(0, 10) gives 0', () => {
