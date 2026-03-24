@@ -16,6 +16,7 @@ macro(add_minima_test name sources)
 endmacro()
 
 # Core test suites
+find_package(Threads REQUIRED)
 add_minima_test(test_mini_number  types/test_mini_number.cpp)
 add_minima_test(test_mini_data    types/test_mini_data.cpp)
 add_minima_test(test_kissvm       kissvm/test_kissvm.cpp)
@@ -27,6 +28,7 @@ add_minima_test(test_token        objects/test_token.cpp)
 add_minima_test(test_mining       mining/test_mining.cpp)
 add_minima_test(test_difficulty   chain/test_difficulty.cpp)
 add_minima_test(test_network      network/test_network.cpp)
+add_minima_test(test_loopback     network/test_loopback_handshake.cpp)
 add_minima_test(test_ibd          objects/test_ibd.cpp)
 add_minima_test(test_mempool      mempool/test_mempool.cpp)
 
@@ -38,6 +40,8 @@ add_minima_test(test_multisig     crypto/test_multisig.cpp)
 # When OpenSSL is enabled, explicitly propagate MINIMA_OPENSSL to test targets
 # that use RSA directly (minima-core already links OpenSSL, but test executables
 # may need explicit linkage on some platforms / linker configurations)
+target_link_libraries(test_loopback PRIVATE Threads::Threads)
+
 if(MINIMA_CRYPTO_OPENSSL)
     find_package(OpenSSL REQUIRED)
     foreach(tgt
