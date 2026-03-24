@@ -43,19 +43,24 @@ std::vector<uint8_t> TxBody::serialise() const {
     return ds.buffer();
 }
 
-TxBody TxBody::deserialise(const uint8_t* data, size_t& offset) {
+TxBody TxBody::deserialise(const uint8_t* data, size_t& offset, size_t total_size) {
     TxBody b;
     b.prng          = MiniData::deserialise(data, offset);
     b.txnDifficulty = MiniData::deserialise(data, offset);
     b.txn           = Transaction::deserialise(data, offset);
-    b.witness       = Witness::deserialise(data, offset);
+    b.witness       = Witness::deserialise(data, offset, total_size);
     b.burnTxn       = Transaction::deserialise(data, offset);
-    b.burnWitness   = Witness::deserialise(data, offset);
+    b.burnWitness   = Witness::deserialise(data, offset, total_size);
     int64_t cnt = MiniNumber::deserialise(data, offset).getAsLong();
     b.txnList.reserve((size_t)cnt);
     for (int64_t i = 0; i < cnt; ++i)
         b.txnList.push_back(MiniData::deserialise(data, offset));
     return b;
+}
+
+// backward compat — no total_size
+TxBody TxBody::deserialise(const uint8_t* data, size_t& offset) {
+    return deserialise(data, offset, SIZE_MAX);
 }
 
 } // namespace minima

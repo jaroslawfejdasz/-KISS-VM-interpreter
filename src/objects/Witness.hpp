@@ -174,6 +174,7 @@ public:
     // ── Wire format ───────────────────────────────────────────────────────
     std::vector<uint8_t> serialise() const;
     static Witness       deserialise(const uint8_t* data, size_t& offset);
+    static Witness       deserialise(const uint8_t* data, size_t& offset, size_t total_size);
 
     bool isEmpty() const {
         return m_signatures.empty() && m_coinProofs.empty() && m_scripts.empty();

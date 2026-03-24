@@ -72,12 +72,17 @@ std::vector<uint8_t> TxPoW::serialise(bool includeBody) const {
     return ds.buffer();
 }
 
-TxPoW TxPoW::deserialise(const uint8_t* data, size_t& offset) {
+TxPoW TxPoW::deserialise(const uint8_t* data, size_t& offset, size_t total_size) {
     TxPoW t;
     t.m_header = TxHeader::deserialise(data, offset);
     uint8_t present = data[offset++];
-    if (present) t.m_body = TxBody::deserialise(data, offset);
+    if (present) t.m_body = TxBody::deserialise(data, offset, total_size);
     return t;
+}
+
+// backward compat
+TxPoW TxPoW::deserialise(const uint8_t* data, size_t& offset) {
+    return deserialise(data, offset, SIZE_MAX);
 }
 
 } // namespace minima

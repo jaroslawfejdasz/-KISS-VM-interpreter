@@ -39,6 +39,7 @@ public:
 
     std::vector<uint8_t> serialise(bool includeBody = true) const;
     static TxPoW         deserialise(const uint8_t* data, size_t& offset);
+    static TxPoW         deserialise(const uint8_t* data, size_t& offset, size_t total_size);
     static TxPoW         deserialise(const std::vector<uint8_t>& data) {
         size_t off = 0; return deserialise(data.data(), off);
     }
