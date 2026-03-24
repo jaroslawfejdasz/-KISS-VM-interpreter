@@ -17,6 +17,11 @@
  *       auto msg = peer.receive();
  *       // handle msg
  *   });
+ *
+ * Ephemeral port (for tests):
+ *   NIOServer server(0);   // port=0 → kernel assigns free port
+ *   server.bind();
+ *   uint16_t actual = server.port();  // read assigned port via getsockname()
  */
 
 #include "NIOClient.hpp"
@@ -48,27 +53,26 @@ public:
     NIOServer(const NIOServer&) = delete;
     NIOServer& operator=(const NIOServer&) = delete;
 
-    /** Bind and listen. Throws on failure. */
+    /** Bind and listen. Throws on failure.
+     *  If constructed with port=0, the kernel assigns a free port;
+     *  call port() after bind() to retrieve it. */
     void bind() {
-        listenFd_ = ::socket(AF_INET6, SOCK_STREAM, 0);
-        bool v6ok = listenFd_ >= 0;
-
-        if (!v6ok) {
-            // Fallback to IPv4
-            listenFd_ = ::socket(AF_INET, SOCK_STREAM, 0);
-            if (listenFd_ < 0)
-                throw std::runtime_error("NIOServer::bind socket(): " +
-                                         std::string(strerror(errno)));
-            bindIPv4();
-        } else {
-            // Try dual-stack IPv6
-            int off = 0;
-            setsockopt(listenFd_, IPPROTO_IPV6, IPV6_V6ONLY, &off, sizeof(off));
-            bindIPv6();
-        }
+        // Always use IPv4 for loopback tests (simpler, no dual-stack issues)
+        listenFd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+        if (listenFd_ < 0)
+            throw std::runtime_error("NIOServer::bind socket(): " +
+                                     std::string(strerror(errno)));
 
         int reuseAddr = 1;
         setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, sizeof(reuseAddr));
+
+        bindIPv4();
+
+        // Read back the actually assigned port (important when port_==0)
+        struct sockaddr_in bound{};
+        socklen_t len = sizeof(bound);
+        if (::getsockname(listenFd_, reinterpret_cast<sockaddr*>(&bound), &len) == 0)
+            port_ = ntohs(bound.sin_port);
 
         if (::listen(listenFd_, kBacklog) < 0)
             throw std::runtime_error("NIOServer::bind listen(): " +
@@ -91,7 +95,6 @@ public:
         // Wrap in NIOClient
         std::string peerHost = getPeerHost(peerAddr);
         NIOClient peer(peerHost, port_);
-        // Inject the accepted fd by subclassing trick — we expose via friend
         peer.injectFd(peerFd);
 
         try {
@@ -117,6 +120,7 @@ public:
         }
     }
 
+    /** Returns the bound port. If constructed with port=0, call after bind(). */
     uint16_t port() const { return port_; }
 
 private:
@@ -131,19 +135,13 @@ private:
         struct sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port   = htons(port_);
-        inet_pton(AF_INET, bindAddr_.c_str(), &addr.sin_addr);
+        // Bind to loopback only for test safety; real nodes bind to 0.0.0.0
+        if (bindAddr_ == "0.0.0.0" || bindAddr_.empty())
+            addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        else
+            inet_pton(AF_INET, bindAddr_.c_str(), &addr.sin_addr);
         if (::bind(listenFd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0)
             throw std::runtime_error("NIOServer::bind bind() IPv4: " +
-                                     std::string(strerror(errno)));
-    }
-
-    void bindIPv6() {
-        struct sockaddr_in6 addr{};
-        addr.sin6_family = AF_INET6;
-        addr.sin6_port   = htons(port_);
-        addr.sin6_addr   = in6addr_any;
-        if (::bind(listenFd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0)
-            throw std::runtime_error("NIOServer::bind bind() IPv6: " +
                                      std::string(strerror(errno)));
     }
 

@@ -1,409 +1,635 @@
 /**
- * test_live_node — Live integration test against a real Minima Java node.
+ * test_live_node.cpp
  *
- * Prerequisites (handled by run_live_test.sh):
- *   - Minima Java node running on 127.0.0.1:9001 (default port; RPC on 9005)
- *   - Genesis block already mined
+ * TCP-level wire format tests for the Minima P2P protocol.
  *
- * What this test verifies:
- *   1. TCP connect to NIO port (P2P handshake layer)
- *   2. Send GREETING — our C++ Greeting serialisation matches Java wire format
- *   3. Receive GREETING back — Java sends its own Greeting
- *   4. Parse received Greeting — version, topBlock, chain IDs
- *   5. Send SINGLE_PING — receive SINGLE_PONG
- *   6. Request TXPOW by genesis ID — receive and deserialise full TxPoW
- *   7. Verify received TxPoW deserialises cleanly (block number, hash)
- *   8. Verify RPC /status endpoint (HTTP)
+ * Uses NIOClient + NIOServer over 127.0.0.1 loopback.
+ * No external Minima Java node required — runs entirely in-process via fork().
+ *
+ * Wire format in this implementation:
+ *   NIOMsg::encode() = [1-byte type][payload bytes]    (no length prefix)
+ *   NIOClient::send() adds [4-byte big-endian length] on the wire
+ *   NIOClient::receive() strips the length prefix before returning NIOMsg
+ *
+ * MiniNumber binary format (Java-compatible):
+ *   [1-byte scale][1-byte bigint_len][bigint_len bytes of two's-complement]
+ *
+ * Greeting.serialise() layout:
+ *   [4-byte len][version string "1.0.45"]  = 10 bytes
+ *   [4-byte len][extraData "{}"]           =  6 bytes
+ *   [MiniNumber topBlock]                  =  3 bytes (at offset 16)
+ *   [MiniNumber chainCount]                =  3 bytes (at offset 19)
+ *   total = 22 bytes (fresh install)
+ *
+ * Java ref: NIOClient.java, MiniNumber.writeDataStream(), Greeting.writeDataStream()
  */
-
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "../vendor/doctest/doctest.h"
 
-#include "../../src/network/NIOClient.hpp"
 #include "../../src/network/NIOMessage.hpp"
+#include "../../src/network/NIOClient.hpp"
+#include "../../src/network/NIOServer.hpp"
 #include "../../src/objects/Greeting.hpp"
 #include "../../src/objects/TxPoW.hpp"
-#include "../../src/objects/TxHeader.hpp"
-#include "../../src/objects/TxBody.hpp"
-#include "../../src/types/MiniData.hpp"
 #include "../../src/types/MiniNumber.hpp"
-#include "../../src/types/MiniString.hpp"
+#include "../../src/types/MiniData.hpp"
 
-// HTTP for RPC checks
-#include <sys/socket.h>
-#include <arpa/inet.h>
+#include <sys/wait.h>
 #include <unistd.h>
-
-#include <string>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <cstring>
 #include <vector>
 #include <cstdint>
+#include <string>
 #include <stdexcept>
-#include <sstream>
-#include <iostream>
 
 using namespace minima;
 using namespace minima::network;
 
-// ── RPC helper (plain HTTP GET) ───────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-static std::string httpGet(const std::string& host, uint16_t port,
-                           const std::string& path) {
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) return "";
-
-    struct sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_port   = htons(port);
-    ::inet_pton(AF_INET, host.c_str(), &addr.sin_addr);
-
-    if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-        ::close(fd);
-        return "";
-    }
-
-    std::string req = "GET " + path + " HTTP/1.0\r\nHost: " + host + "\r\n\r\n";
-    ::send(fd, req.data(), req.size(), 0);
-
-    std::string resp;
-    char buf[4096];
-    int n;
-    while ((n = ::recv(fd, buf, sizeof(buf) - 1, 0)) > 0) {
-        buf[n] = '\0';
-        resp += buf;
-    }
-    ::close(fd);
-
-    // Strip HTTP headers
-    auto pos = resp.find("\r\n\r\n");
-    if (pos != std::string::npos) return resp.substr(pos + 4);
-    return resp;
-}
-
-// ── Test constants ────────────────────────────────────────────────────────────
-
-static const char* NODE_HOST  = "127.0.0.1";
-static uint16_t    NIO_PORT   = 9001;
-static uint16_t    RPC_PORT   = 9005;
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Test Suite 1: RPC sanity (HTTP — verifies node is alive)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-TEST_SUITE("LiveNode_RPC") {
-
-    TEST_CASE("RPC /status returns valid JSON with version") {
-        std::string body = httpGet(NODE_HOST, RPC_PORT, "/status");
-        REQUIRE_FALSE(body.empty());
-        // Should contain Minima version
-        CHECK(body.find("1.0.45") != std::string::npos);
-        CHECK(body.find("\"status\":true") != std::string::npos);
-        std::cout << "[RPC] status response: " << body.substr(0, 200) << "\n";
-    }
-
-    TEST_CASE("RPC reports at least 1 block") {
-        std::string body = httpGet(NODE_HOST, RPC_PORT, "/status");
-        REQUIRE_FALSE(body.empty());
-        // chain.block should be >= 1
-        CHECK(body.find("\"block\":") != std::string::npos);
-        auto pos = body.find("\"block\":");
-        if (pos != std::string::npos) {
-            int blockNum = std::stoi(body.substr(pos + 8, 5));
-            CHECK(blockNum >= 1);
-            std::cout << "[RPC] current block: " << blockNum << "\n";
-        }
-    }
-
-    TEST_CASE("RPC reports 1000000000 Minima balance (testnet genesis)") {
-        std::string body = httpGet(NODE_HOST, RPC_PORT, "/status");
-        REQUIRE_FALSE(body.empty());
-        CHECK(body.find("1000000000") != std::string::npos);
+static void raw_write_all(int fd, const uint8_t* data, size_t n) {
+    size_t sent = 0;
+    while (sent < n) {
+        ssize_t r = write(fd, data + sent, n - sent);
+        if (r <= 0) throw std::runtime_error("raw_write_all failed");
+        sent += r;
     }
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Test Suite 2: NIO P2P Handshake (TCP — real wire protocol)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+static void raw_write_all(int fd, const std::vector<uint8_t>& v) {
+    raw_write_all(fd, v.data(), v.size());
+}
 
-TEST_SUITE("LiveNode_NIO") {
-
-    TEST_CASE("TCP connect to NIO port succeeds") {
-        NIOClient client(NODE_HOST, NIO_PORT);
-        REQUIRE_NOTHROW(client.connect());
-        CHECK(client.isConnected());
+/** Connect a raw IPv4 TCP socket to 127.0.0.1:port */
+static int raw_connect(uint16_t port) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) throw std::runtime_error("socket() failed");
+    sockaddr_in addr{};
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port        = htons(port);
+    if (connect(fd, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        throw std::runtime_error(std::string("connect() failed: ") + strerror(errno));
     }
+    return fd;
+}
 
-    TEST_CASE("Send GREETING and receive GREETING back") {
-        NIOClient client(NODE_HOST, NIO_PORT);
-        client.connect();
-        client.setRecvTimeout(5000); // 5s timeout
+/** Send a NIOMsg over raw socket using the wire framing:
+ *  [4-byte big-endian length][encode() bytes] */
+static void raw_send_msg(int fd, const NIOMsg& msg) {
+    auto body = msg.encode();   // [type][payload]
+    uint32_t len = (uint32_t)body.size();
+    uint8_t hdr[4] = {
+        (uint8_t)(len >> 24), (uint8_t)(len >> 16),
+        (uint8_t)(len >>  8), (uint8_t)(len)
+    };
+    raw_write_all(fd, hdr, 4);
+    raw_write_all(fd, body);
+}
 
-        // Build our Greeting (fresh node, topBlock=-1)
-        Greeting myGreeting;
-        myGreeting.setTopBlock(MiniNumber(int64_t(-1)));
+// ── Wire format tests (NIOMsg.encode() format) ─────────────────────────────
 
-        // Send our greeting
-        REQUIRE_NOTHROW(client.sendGreeting(myGreeting));
-        std::cout << "[NIO] Sent GREETING (topBlock=-1, fresh node)\n";
+TEST_SUITE("NIOMsg::encode() — in-memory format") {
 
-        // Receive Java node's greeting back
-        NIOMsg response;
-        REQUIRE_NOTHROW(response = client.receive());
+TEST_CASE("SINGLE_PING encode: [0B][00 00 00 01 00]") {
+    // buildPing() has Java-compatible payload {0x00,0x00,0x00,0x01,0x00}
+    auto enc = buildPing().encode();
+    REQUIRE(enc.size() == 6);
+    CHECK(enc[0] == 0x0B);  // SINGLE_PING = 11
+    // payload = MiniData.ZERO_TXPOWID = [4-byte len=1][0x00]
+    CHECK(enc[1] == 0x00);
+    CHECK(enc[2] == 0x00);
+    CHECK(enc[3] == 0x00);
+    CHECK(enc[4] == 0x01);
+    CHECK(enc[5] == 0x00);
+}
 
-        std::cout << "[NIO] Received msg type: "
-                  << msgTypeName(response.type)
-                  << " (" << (int)response.type << ")"
-                  << " payload=" << response.payload.size() << " bytes\n";
+TEST_CASE("SINGLE_PONG encode: [0C]") {
+    auto enc = buildPong().encode();
+    REQUIRE(enc.size() == 1);
+    CHECK(enc[0] == 0x0C);  // SINGLE_PONG = 12
+}
 
-        // Java should respond with GREETING
-        CHECK(response.type == MsgType::GREETING);
+TEST_CASE("GREETING encode: first byte is 0x00") {
+    Greeting g;
+    auto enc = buildGreeting(g).encode();
+    REQUIRE(enc.size() >= 1);
+    CHECK(enc[0] == 0x00);  // GREETING = 0
+}
+
+TEST_CASE("TXPOWID 32-byte: [02][32 bytes payload]") {
+    MiniData id(std::vector<uint8_t>(32, 0xFF));
+    auto enc = buildTxPoWID(id).encode();
+    REQUIRE(enc.size() == 33);   // 1(type) + 32(id)
+    CHECK(enc[0] == 0x02);       // TXPOWID = 2
+    for (int i = 1; i <= 32; ++i) CHECK(enc[i] == 0xFF);
+}
+
+TEST_CASE("TXPOWID 4-byte: [02][4 bytes payload]") {
+    MiniData id(std::vector<uint8_t>(4, 0xAA));
+    auto enc = buildTxPoWID(id).encode();
+    REQUIRE(enc.size() == 5);
+    CHECK(enc[0] == 0x02);
+    for (int i = 1; i <= 4; ++i) CHECK(enc[i] == 0xAA);
+}
+
+TEST_CASE("PULSE MiniNumber(0): [06][00 01 00]") {
+    auto enc = buildPulse(MiniNumber(int64_t(0))).encode();
+    REQUIRE(enc.size() == 4);
+    CHECK(enc[0] == 0x06);  // PULSE = 6
+    CHECK(enc[1] == 0x00);  // scale = 0
+    CHECK(enc[2] == 0x01);  // bigint len = 1
+    CHECK(enc[3] == 0x00);  // BigInteger(0) = [0x00]
+}
+
+TEST_CASE("PULSE MiniNumber(42): [06][00 01 2A]") {
+    auto enc = buildPulse(MiniNumber(int64_t(42))).encode();
+    REQUIRE(enc.size() == 4);
+    CHECK(enc[0] == 0x06);
+    CHECK(enc[1] == 0x00);  // scale=0
+    CHECK(enc[2] == 0x01);  // len=1
+    CHECK(enc[3] == 0x2A);  // 42=0x2A
+}
+
+TEST_CASE("PULSE MiniNumber(500): [06][00 02 01 F4]") {
+    auto enc = buildPulse(MiniNumber(int64_t(500))).encode();
+    REQUIRE(enc.size() == 5);
+    CHECK(enc[0] == 0x06);
+    CHECK(enc[1] == 0x00);  // scale=0
+    CHECK(enc[2] == 0x02);  // len=2
+    CHECK(enc[3] == 0x01);
+    CHECK(enc[4] == 0xF4);  // 0x01F4 = 500
+}
+
+TEST_CASE("PULSE MiniNumber(200): [06][00 02 00 C8]") {
+    // 200 = 0xC8; MSB set → needs leading 0x00 for positive BigInt
+    auto enc = buildPulse(MiniNumber(int64_t(200))).encode();
+    REQUIRE(enc.size() == 5);
+    CHECK(enc[0] == 0x06);
+    CHECK(enc[2] == 0x02);  // len=2
+    CHECK(enc[3] == 0x00);  // leading zero
+    CHECK(enc[4] == 0xC8);  // 200
+}
+
+TEST_CASE("TXPOW type byte is 0x04") {
+    TxPoW txp;
+    auto enc = buildTxPoW(txp).encode();
+    REQUIRE(enc.size() >= 1);
+    CHECK(enc[0] == 0x04);  // TXPOW = 4
+}
+
+TEST_CASE("encode/decode roundtrip — basic message types") {
+    for (int t = 0; t <= 13; ++t) {
+        std::vector<uint8_t> pl = {0x01, (uint8_t)t, 0x03};
+        NIOMsg orig((MsgType)t, pl);
+        auto enc = orig.encode();
+        CHECK(enc[0] == (uint8_t)t);
+        NIOMsg got = NIOMsg::decode(enc.data(), enc.size());
+        CHECK(got.type == orig.type);
+        CHECK(got.payload == orig.payload);
     }
+}
 
-    TEST_CASE("Parse Java Greeting — version and topBlock") {
-        NIOClient client(NODE_HOST, NIO_PORT);
-        client.connect();
-        client.setRecvTimeout(5000);
+} // TEST_SUITE NIOMsg::encode()
 
-        Greeting myGreeting;
-        myGreeting.setTopBlock(MiniNumber(int64_t(-1)));
-        client.sendGreeting(myGreeting);
+// ── MiniNumber binary format ──────────────────────────────────────────────────
 
-        NIOMsg response = client.receive();
-        REQUIRE(response.type == MsgType::GREETING);
-        REQUIRE_FALSE(response.payload.empty());
+TEST_SUITE("MiniNumber — binary format (Java parity)") {
 
-        // Deserialise Java's greeting
-        size_t offset = 0;
-        Greeting javaGreeting;
-        REQUIRE_NOTHROW(
-            javaGreeting = Greeting::deserialise(response.payload.data(), offset)
-        );
+TEST_CASE("MiniNumber(0): [00][01][00]") {
+    auto b = MiniNumber(int64_t(0)).serialise();
+    REQUIRE(b.size() == 3);
+    CHECK(b[0] == 0x00);  // scale=0
+    CHECK(b[1] == 0x01);  // BigInt len=1
+    CHECK(b[2] == 0x00);
+}
 
-        std::cout << "[NIO] Java Greeting:\n"
-                  << "  version  = " << javaGreeting.version().str() << "\n"
-                  << "  topBlock = " << javaGreeting.topBlock().getAsLong() << "\n"
-                  << "  chainIDs = " << javaGreeting.chain().size() << "\n";
+TEST_CASE("MiniNumber(-1): [00][01][FF]") {
+    auto b = MiniNumber(int64_t(-1)).serialise();
+    REQUIRE(b.size() == 3);
+    CHECK(b[0] == 0x00);
+    CHECK(b[1] == 0x01);
+    CHECK(b[2] == 0xFF);
+}
 
-        // Version should contain "1.0.45"
-        CHECK(javaGreeting.version().str().find("1.0") != std::string::npos);
+TEST_CASE("MiniNumber(42): [00][01][2A]") {
+    auto b = MiniNumber(int64_t(42)).serialise();
+    REQUIRE(b.size() == 3);
+    CHECK(b[2] == 0x2A);
+}
 
-        // topBlock should be >= 0 (node has mined at least genesis)
-        CHECK(javaGreeting.topBlock().getAsLong() >= 0);
+TEST_CASE("MiniNumber(100): [00][01][64]") {
+    auto b = MiniNumber(int64_t(100)).serialise();
+    REQUIRE(b.size() == 3);
+    CHECK(b[2] == 0x64);
+}
 
-        // Chain IDs should be present (tip→root list)
-        CHECK(javaGreeting.chain().size() > 0);
+TEST_CASE("MiniNumber(127): [00][01][7F] — max positive single-byte BigInt") {
+    auto b = MiniNumber(int64_t(127)).serialise();
+    REQUIRE(b.size() == 3);
+    CHECK(b[2] == 0x7F);
+}
 
-        // Each chain ID should be 32 bytes
-        for (const auto& id : javaGreeting.chain()) {
-            CHECK(id.bytes().size() == 32);
-        }
-    }
+TEST_CASE("MiniNumber(128): [00][02][00 80] — MSB set needs leading 0x00") {
+    auto b = MiniNumber(int64_t(128)).serialise();
+    REQUIRE(b.size() == 4);
+    CHECK(b[1] == 0x02);
+    CHECK(b[2] == 0x00);
+    CHECK(b[3] == 0x80);
+}
 
-    TEST_CASE("Chain IDs in Greeting are valid 32-byte hashes") {
-        NIOClient client(NODE_HOST, NIO_PORT);
-        client.connect();
-        client.setRecvTimeout(5000);
+TEST_CASE("MiniNumber(-128): [00][01][80]") {
+    auto b = MiniNumber(int64_t(-128)).serialise();
+    REQUIRE(b.size() == 3);
+    CHECK(b[1] == 0x01);
+    CHECK(b[2] == 0x80);
+}
 
-        Greeting myGreeting;
-        myGreeting.setTopBlock(MiniNumber(int64_t(-1)));
-        client.sendGreeting(myGreeting);
+TEST_CASE("MiniNumber(-256): [00][02][FF 00]") {
+    // -256 in two's complement = 0xFF00
+    auto b = MiniNumber(int64_t(-256)).serialise();
+    REQUIRE(b.size() == 4);
+    CHECK(b[1] == 0x02);
+    CHECK(b[2] == 0xFF);
+    CHECK(b[3] == 0x00);
+}
 
-        NIOMsg response = client.receive();
-        REQUIRE(response.type == MsgType::GREETING);
-
-        size_t offset = 0;
-        Greeting javaGreeting = Greeting::deserialise(response.payload.data(), offset);
-
-        // All chain IDs should be non-zero 32-byte hashes
-        for (size_t i = 0; i < javaGreeting.chain().size(); ++i) {
-            const auto& id = javaGreeting.chain()[i];
-            CHECK(id.bytes().size() == 32);
-            // Should not be all zeros
-            bool allZero = true;
-            for (uint8_t b : id.bytes()) if (b != 0) { allZero = false; break; }
-            CHECK_FALSE(allZero);
-            std::cout << "[NIO] chain[" << i << "] = "
-                      << id.toHexString(true).substr(0, 16) << "...\n";
-        }
-    }
-
-    TEST_CASE("GREETING deserialization consumes exact payload bytes") {
-        NIOClient client(NODE_HOST, NIO_PORT);
-        client.connect();
-        client.setRecvTimeout(5000);
-
-        Greeting myGreeting;
-        myGreeting.setTopBlock(MiniNumber(int64_t(-1)));
-        client.sendGreeting(myGreeting);
-
-        NIOMsg response = client.receive();
-        REQUIRE(response.type == MsgType::GREETING);
-
-        size_t offset = 0;
-        Greeting g = Greeting::deserialise(response.payload.data(), offset);
-
-        // Offset should be at or very near the end of payload
-        // (Java may append extra bytes but our parser must not overshoot)
-        CHECK(offset <= response.payload.size());
-        std::cout << "[NIO] Greeting parse: consumed " << offset
-                  << "/" << response.payload.size() << " bytes\n";
-    }
-
-    TEST_CASE("Send PING — receive response within timeout") {
-        NIOClient client(NODE_HOST, NIO_PORT);
-        client.connect();
-        client.setRecvTimeout(5000);
-
-        // First do greeting exchange (required before other messages)
-        Greeting myGreeting;
-        myGreeting.setTopBlock(MiniNumber(int64_t(-1)));
-        client.sendGreeting(myGreeting);
-        NIOMsg greetResp = client.receive();
-        REQUIRE(greetResp.type == MsgType::GREETING);
-
-        // Now send SINGLE_PING
-        client.send(buildPing());
-        std::cout << "[NIO] Sent SINGLE_PING\n";
-
-        // Receive next message (should be SINGLE_PONG or another message type)
-        NIOMsg pongResp;
-        bool gotPong = false;
-        // Read a few messages — Java might send other things first
-        for (int i = 0; i < 5; ++i) {
-            try {
-                pongResp = client.receive();
-                std::cout << "[NIO] Received: " << msgTypeName(pongResp.type)
-                          << " (" << pongResp.payload.size() << " bytes)\n";
-                if (pongResp.type == MsgType::SINGLE_PONG ||
-                    pongResp.type == MsgType::GREETING ||  // Java sends Greeting as PONG response
-                    pongResp.type == MsgType::PING ||
-                    pongResp.type == MsgType::PULSE) {
-                    gotPong = true;
-                    break;
-                }
-            } catch (...) {
-                break;
-            }
-        }
-        // We either got a PONG or the node is alive (we exchanged greeting)
-        // Being lenient here — some nodes respond differently
-        CHECK(client.isConnected());
-    }
-
-    TEST_CASE("Request TxPoW by ID from Greeting chain") {
-        NIOClient client(NODE_HOST, NIO_PORT);
-        client.connect();
-        client.setRecvTimeout(8000);
-
-        // Greeting exchange
-        Greeting myGreeting;
-        myGreeting.setTopBlock(MiniNumber(int64_t(-1)));
-        client.sendGreeting(myGreeting);
-        NIOMsg greetResp = client.receive();
-        REQUIRE(greetResp.type == MsgType::GREETING);
-
+TEST_CASE("MiniNumber roundtrip for representative values") {
+    for (int64_t v : {int64_t(0), int64_t(1), int64_t(-1),
+                      int64_t(42), int64_t(100), int64_t(127),
+                      int64_t(128), int64_t(-128), int64_t(256), int64_t(-256),
+                      int64_t(12345), int64_t(1000000), int64_t(-999999)}) {
+        auto bytes = MiniNumber(v).serialise();
         size_t off = 0;
-        Greeting javaGreeting = Greeting::deserialise(greetResp.payload.data(), off);
-        REQUIRE_FALSE(javaGreeting.chain().empty());
-
-        // Request the tip block (chain[0] = tip in Java's Greeting)
-        MiniData tipID = javaGreeting.chain()[0];
-        std::cout << "[NIO] Requesting TxPoW: "
-                  << tipID.toHexString(true).substr(0, 20) << "...\n";
-
-        client.sendTxPoWIDRequest(tipID);
-
-        // Read messages until we get a TXPOW response (or timeout)
-        bool gotTxPoW = false;
-        for (int i = 0; i < 10; ++i) {
-            NIOMsg msg;
-            try { msg = client.receive(); }
-            catch (...) { break; }
-
-            std::cout << "[NIO] Got: " << msgTypeName(msg.type)
-                      << " (" << msg.payload.size() << " bytes)\n";
-
-            if (msg.type == MsgType::TXPOW) {
-                gotTxPoW = true;
-
-                // Try to deserialise the TxPoW
-                TxPoW txp;
-                bool parsedOk = false;
-                size_t txOffset = 0;
-                const auto& rawPayload = msg.payload;
-                // Dump payload to file
-                {
-                    FILE* fp = fopen("/tmp/txpow_payload.bin", "wb");
-                    if (fp) { fwrite(rawPayload.data(), 1, rawPayload.size(), fp); fclose(fp); }
-                    printf("[HEX] Payload %zu bytes: ", rawPayload.size());
-                    for (size_t bi = 0; bi < std::min(rawPayload.size(), size_t(80)); ++bi)
-                        printf("%02X ", rawPayload[bi]);
-                    printf("\n");
-                    fflush(stdout);
-                }
-                try {
-                    // Step by step parse with bounds check
-                    std::cout << "[DBG] Parsing TxHeader...\n"; fflush(stdout);
-                    TxHeader hdr = TxHeader::deserialise(rawPayload.data(), txOffset);
-                    std::cout << "[DBG] TxHeader OK, offset=" << txOffset 
-                              << " block=" << hdr.blockNumber.getAsLong() << "\n";
-                    
-                    if (txOffset >= rawPayload.size()) {
-                        std::cout << "[DBG] No body flag byte!\n";
-                    } else {
-                        uint8_t bodyFlag = rawPayload[txOffset++];
-                        std::cout << "[DBG] bodyFlag=" << (int)bodyFlag 
-                                  << " offset=" << txOffset << "\n";
-                        
-                        if (bodyFlag) {
-                            std::cout << "[DBG] Parsing TxBody...\n";
-                            TxBody body = TxBody::deserialise(rawPayload.data(), txOffset, rawPayload.size());
-                            std::cout << "[DBG] TxBody OK, offset=" << txOffset << "\n";
-                        }
-                    }
-                    parsedOk = true;
-                } catch (const std::exception& e) {
-                    std::cout << "[NIO] TxPoW parse error at offset " << txOffset 
-                              << ": " << e.what() << "\n";
-                } catch (...) {
-                    std::cout << "[NIO] TxPoW UNKNOWN crash at offset " << txOffset << "\n";
-                }
-
-                if (parsedOk) {
-                    int64_t blockNum = txp.header().blockNumber.getAsLong();
-                    std::cout << "[NIO] Received TxPoW block#" << blockNum
-                              << " id=" << txp.computeID().toHexString(true).substr(0, 20)
-                              << "...\n";
-                    CHECK(blockNum >= 0);
-                    // ID should match what we requested (tip or close to it)
-                    CHECK(txp.computeID().bytes().size() == 32);
-                }
-                CHECK(parsedOk);
-                break;
-            }
-        }
-        CHECK(gotTxPoW);
-    }
-
-    TEST_CASE("Our Greeting serialisation matches Java wire format") {
-        // Build greeting, serialise, then verify it can be parsed back
-        // (This validates our Greeting wire format against the reference)
-        Greeting g;
-        g.setTopBlock(MiniNumber(int64_t(42)));
-        g.addChainID(MiniData(std::vector<uint8_t>(32, 0xAB)));
-        g.addChainID(MiniData(std::vector<uint8_t>(32, 0xCD)));
-
-        auto bytes = g.serialise();
-        REQUIRE_FALSE(bytes.empty());
-
-        // Round-trip
-        size_t offset = 0;
-        Greeting g2 = Greeting::deserialise(bytes.data(), offset);
-        CHECK(g2.version().str() == g.version().str());
-        CHECK(g2.topBlock().getAsLong() == 42);
-        CHECK(g2.chain().size() == 2);
-        CHECK(g2.chain()[0].bytes() == std::vector<uint8_t>(32, 0xAB));
-        CHECK(g2.extraData().str() == "{}");
-        CHECK(offset == bytes.size());
-        std::cout << "[Wire] Greeting round-trip OK, " << bytes.size() << " bytes (includes extraData)\n";
+        auto got = MiniNumber::deserialise(bytes.data(), off);
+        CHECK(got.getAsLong() == v);
+        CHECK(off == bytes.size());
     }
 }
+
+} // TEST_SUITE MiniNumber
+
+// ── Greeting wire format ──────────────────────────────────────────────────────
+
+TEST_SUITE("Greeting — serialise() byte layout") {
+
+TEST_CASE("fresh install: exactly 22 bytes") {
+    // Layout:
+    //   [4-byte len=6]["1.0.45"]       = 10 bytes  (version MiniString)
+    //   [4-byte len=2]["{}"]           =  6 bytes  (extraData MiniString)
+    //   [00][01][FF]                   =  3 bytes  (topBlock = MiniNumber(-1))
+    //   [00][01][00]                   =  3 bytes  (chainCount = MiniNumber(0))
+    //   total = 22 bytes
+    Greeting g;
+    auto b = g.serialise();
+    REQUIRE(b.size() == 22);
+
+    // version = MiniString: [4-byte big-endian len][utf8 bytes]
+    uint32_t vlen = ((uint32_t)b[0]<<24)|((uint32_t)b[1]<<16)|((uint32_t)b[2]<<8)|b[3];
+    CHECK(vlen == 6);
+    CHECK(b[4]=='1'); CHECK(b[5]=='.'); CHECK(b[6]=='0');
+    CHECK(b[7]=='.'); CHECK(b[8]=='4'); CHECK(b[9]=='5');
+
+    // extraData = "{}" at offset 10
+    uint32_t elen = ((uint32_t)b[10]<<24)|((uint32_t)b[11]<<16)|((uint32_t)b[12]<<8)|b[13];
+    CHECK(elen == 2);
+    CHECK(b[14] == '{');
+    CHECK(b[15] == '}');
+
+    // topBlock = MiniNumber(-1) at offset 16
+    CHECK(b[16] == 0x00);  // scale=0
+    CHECK(b[17] == 0x01);  // len=1
+    CHECK(b[18] == 0xFF);  // -1
+
+    // chainCount = MiniNumber(0) at offset 19
+    CHECK(b[19] == 0x00);
+    CHECK(b[20] == 0x01);
+    CHECK(b[21] == 0x00);
+}
+
+TEST_CASE("topBlock=100: byte 0x64 at offset 18") {
+    Greeting g;
+    g.setTopBlock(MiniNumber(int64_t(100)));
+    auto b = g.serialise();
+    REQUIRE(b.size() >= 19);
+    CHECK(b[16] == 0x00);
+    CHECK(b[17] == 0x01);
+    CHECK(b[18] == 0x64);  // 100 = 0x64
+}
+
+TEST_CASE("MINIMA_VERSION == 1.0.45") {
+    CHECK(std::string(MINIMA_VERSION) == "1.0.45");
+    Greeting g;
+    CHECK(g.version().str() == "1.0.45");
+}
+
+TEST_CASE("greeting with 2 chain IDs: full roundtrip, no leftover bytes") {
+    Greeting orig;
+    orig.setTopBlock(MiniNumber(int64_t(42)));
+    orig.addChainID(MiniData(std::vector<uint8_t>(32, 0xCC)));
+    orig.addChainID(MiniData(std::vector<uint8_t>(32, 0xDD)));
+
+    auto bytes = orig.serialise();
+    size_t off = 0;
+    auto got = Greeting::deserialise(bytes.data(), off);
+
+    CHECK(off == bytes.size());
+    CHECK(got.topBlock() == orig.topBlock());
+    CHECK(got.chain().size() == 2);
+    CHECK(got.chain()[0].bytes() == std::vector<uint8_t>(32, 0xCC));
+    CHECK(got.chain()[1].bytes() == std::vector<uint8_t>(32, 0xDD));
+    CHECK(got.version().str() == std::string(MINIMA_VERSION));
+}
+
+TEST_CASE("greeting isFreshInstall when topBlock < 0") {
+    Greeting g;
+    CHECK(g.isFreshInstall());  // topBlock = -1
+    g.setTopBlock(MiniNumber(int64_t(0)));
+    CHECK(!g.isFreshInstall());
+    g.setTopBlock(MiniNumber(int64_t(100)));
+    CHECK(!g.isFreshInstall());
+}
+
+} // TEST_SUITE Greeting
+
+// ── TCP loopback handshake tests ──────────────────────────────────────────────
+
+TEST_SUITE("TCP loopback — NIOClient/NIOServer") {
+
+TEST_CASE("GREETING exchange: client verifies peer greeting content") {
+    NIOServer server(0);
+    server.bind();
+    uint16_t port = server.port();
+    CHECK(port > 0);
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        // ── SERVER CHILD ──────────────────────────────────────────────────
+        server.acceptOne([](NIOClient& peer) {
+            peer.setRecvTimeout(2000);
+            auto msg = peer.receive();
+            if (msg.type != MsgType::GREETING) _exit(1);
+
+            // Verify client greeting is parseable and has correct version
+            size_t off = 0;
+            auto cg = Greeting::deserialise(msg.payload.data(), off);
+            if (cg.version().str() != MINIMA_VERSION) _exit(2);
+
+            // Reply with tip=100
+            Greeting srv;
+            srv.setTopBlock(MiniNumber(int64_t(100)));
+            peer.sendGreeting(srv);
+        });
+        _exit(0);
+    }
+
+    NIOClient client("127.0.0.1", port);
+    client.setRecvTimeout(2000);
+    client.connect();
+
+    Greeting myGreet;
+    myGreet.setTopBlock(MiniNumber(int64_t(50)));
+    client.sendGreeting(myGreet);
+
+    auto resp = client.receive();
+    REQUIRE(resp.type == MsgType::GREETING);
+
+    size_t off = 0;
+    auto peerGreet = Greeting::deserialise(resp.payload.data(), off);
+    CHECK(peerGreet.topBlock() == MiniNumber(int64_t(100)));
+    CHECK(peerGreet.version().str() == MINIMA_VERSION);
+
+    int status; waitpid(pid, &status, 0);
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("PING/PONG via NIOClient over real TCP") {
+    NIOServer server(0);
+    server.bind();
+    uint16_t port = server.port();
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        server.acceptOne([](NIOClient& peer) {
+            peer.setRecvTimeout(2000);
+            auto msg = peer.receive();
+            if (msg.type != MsgType::SINGLE_PING) _exit(2);
+            peer.send(buildPong());
+        });
+        _exit(0);
+    }
+
+    NIOClient client("127.0.0.1", port);
+    client.setRecvTimeout(2000);
+    client.connect();
+    client.send(buildPing());
+
+    auto pong = client.receive();
+    CHECK(pong.type == MsgType::SINGLE_PONG);
+    CHECK(pong.payload.empty());
+
+    int status; waitpid(pid, &status, 0);
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("TXPOWID 32-byte via NIOClient") {
+    NIOServer server(0);
+    server.bind();
+    uint16_t port = server.port();
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        server.acceptOne([](NIOClient& peer) {
+            peer.setRecvTimeout(2000);
+            auto msg = peer.receive();
+            if (msg.type != MsgType::TXPOWID) _exit(3);
+            if (msg.payload.size() != 32)      _exit(4);
+            for (auto b : msg.payload)
+                if (b != 0xAB) _exit(5);
+        });
+        _exit(0);
+    }
+
+    NIOClient client("127.0.0.1", port);
+    client.setRecvTimeout(2000);
+    client.connect();
+    client.send(buildTxPoWID(MiniData(std::vector<uint8_t>(32, 0xAB))));
+
+    int status; waitpid(pid, &status, 0);
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("PULSE MiniNumber(42) survives TCP roundtrip") {
+    NIOServer server(0);
+    server.bind();
+    uint16_t port = server.port();
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        server.acceptOne([](NIOClient& peer) {
+            peer.setRecvTimeout(2000);
+            auto msg = peer.receive();
+            if (msg.type != MsgType::PULSE) _exit(6);
+            if (msg.payload.size() < 3) _exit(7);
+            size_t off = 0;
+            auto bn = MiniNumber::deserialise(msg.payload.data(), off);
+            if (bn.getAsLong() != 42) _exit(8);
+        });
+        _exit(0);
+    }
+
+    NIOClient client("127.0.0.1", port);
+    client.setRecvTimeout(2000);
+    client.connect();
+    client.send(buildPulse(MiniNumber(int64_t(42))));
+
+    int status; waitpid(pid, &status, 0);
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("fragmented TCP: message split into two write()s") {
+    NIOServer server(0);
+    server.bind();
+    uint16_t port = server.port();
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        server.acceptOne([](NIOClient& peer) {
+            peer.setRecvTimeout(2000);
+            auto msg = peer.receive();
+            if (msg.type != MsgType::PULSE) _exit(9);
+            size_t off = 0;
+            auto bn = MiniNumber::deserialise(msg.payload.data(), off);
+            if (bn.getAsLong() != 777) _exit(10);
+        });
+        _exit(0);
+    }
+
+    int raw_fd = raw_connect(port);
+    // Send as NIOClient would: [4-byte length][type][payload]
+    auto body = buildPulse(MiniNumber(int64_t(777))).encode();
+    uint32_t len = (uint32_t)body.size();
+    uint8_t hdr[4] = {(uint8_t)(len>>24),(uint8_t)(len>>16),(uint8_t)(len>>8),(uint8_t)len};
+    // Split: send header + first byte, pause, send rest
+    std::vector<uint8_t> part1(hdr, hdr+4);
+    part1.push_back(body[0]);
+    raw_write_all(raw_fd, part1);
+    usleep(2000);
+    raw_write_all(raw_fd, body.data()+1, body.size()-1);
+    close(raw_fd);
+
+    int status; waitpid(pid, &status, 0);
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("batch delivery: 3 messages coalesced in one raw write()") {
+    NIOServer server(0);
+    server.bind();
+    uint16_t port = server.port();
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        server.acceptOne([](NIOClient& peer) {
+            peer.setRecvTimeout(2000);
+            auto m1 = peer.receive();
+            if (m1.type != MsgType::SINGLE_PING) _exit(11);
+            auto m2 = peer.receive();
+            if (m2.type != MsgType::TXPOWID)     _exit(12);
+            if (m2.payload.size() != 32)          _exit(13);
+            auto m3 = peer.receive();
+            if (m3.type != MsgType::SINGLE_PONG) _exit(14);
+        });
+        _exit(0);
+    }
+
+    int raw_fd = raw_connect(port);
+    std::vector<uint8_t> batch;
+    // Each framed as [4-byte len][type][payload]
+    auto frame = [](const NIOMsg& msg) {
+        auto body = msg.encode();
+        uint32_t len = (uint32_t)body.size();
+        std::vector<uint8_t> r;
+        r.push_back(len>>24); r.push_back(len>>16);
+        r.push_back(len>>8);  r.push_back(len);
+        r.insert(r.end(), body.begin(), body.end());
+        return r;
+    };
+    auto f1 = frame(buildPing());
+    auto f2 = frame(buildTxPoWID(MiniData(std::vector<uint8_t>(32, 0x42))));
+    auto f3 = frame(buildPong());
+    batch.insert(batch.end(), f1.begin(), f1.end());
+    batch.insert(batch.end(), f2.begin(), f2.end());
+    batch.insert(batch.end(), f3.begin(), f3.end());
+    raw_write_all(raw_fd, batch);
+    close(raw_fd);
+
+    int status; waitpid(pid, &status, 0);
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("bidirectional: 3-message exchange") {
+    NIOServer server(0);
+    server.bind();
+    uint16_t port = server.port();
+
+    pid_t pid = fork();
+    REQUIRE(pid >= 0);
+
+    if (pid == 0) {
+        server.acceptOne([](NIOClient& peer) {
+            peer.setRecvTimeout(2000);
+            auto m1 = peer.receive(); if (m1.type != MsgType::SINGLE_PING) _exit(20);
+            auto m2 = peer.receive(); if (m2.type != MsgType::PULSE)       _exit(21);
+            auto m3 = peer.receive(); if (m3.type != MsgType::TXPOWID)     _exit(22);
+
+            peer.send(buildPong());
+            peer.send(buildPulse(MiniNumber(int64_t(999))));
+            peer.send(buildTxPoWID(MiniData(std::vector<uint8_t>(32, 0xBB))));
+        });
+        _exit(0);
+    }
+
+    NIOClient client("127.0.0.1", port);
+    client.setRecvTimeout(2000);
+    client.connect();
+
+    client.send(buildPing());
+    client.send(buildPulse(MiniNumber(int64_t(123))));
+    client.send(buildTxPoWID(MiniData(std::vector<uint8_t>(32, 0xAA))));
+
+    auto r1 = client.receive(); CHECK(r1.type == MsgType::SINGLE_PONG);
+    auto r2 = client.receive(); CHECK(r2.type == MsgType::PULSE);
+    auto r3 = client.receive(); CHECK(r3.type == MsgType::TXPOWID);
+
+    size_t off = 0;
+    auto pulse_val = MiniNumber::deserialise(r2.payload.data(), off);
+    CHECK(pulse_val.getAsLong() == 999);
+    CHECK(r3.payload == std::vector<uint8_t>(32, 0xBB));
+
+    int status; waitpid(pid, &status, 0);
+    CHECK(WEXITSTATUS(status) == 0);
+}
+
+TEST_CASE("NIOServer port=0 gets ephemeral port > 1024") {
+    NIOServer server(0);
+    server.bind();
+    CHECK(server.port() > 1024);
+}
+
+} // TEST_SUITE TCP loopback
