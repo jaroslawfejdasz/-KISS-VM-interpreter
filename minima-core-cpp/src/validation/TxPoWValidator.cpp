@@ -84,6 +84,9 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
     const Witness&     witness = txpow.body().witness;
     const auto&        inputs  = txn.inputs();
 
+    // Compute TxPoW ID once — used both for MULTISIG data and logging
+    const MiniData txpowID = txpow.computeID();
+
     for (size_t i = 0; i < inputs.size(); ++i) {
         const Coin& inputCoin = inputs[i];
 
@@ -122,10 +125,11 @@ ValidationResult TxPoWValidator::checkScripts(const TxPoW& txpow) const {
 
             // Inject context
             contract.setBlockNumber(txpow.header().blockNumber);
-
-            // Coin age: blockNumber - coin_creation_block
-            // We don't have creation block here, use 0 (can be enhanced with MMR)
             contract.setCoinAge(MiniNumber::ZERO);
+
+            // CRITICAL: inject @TXPOWID so MULTISIG can verify RSA signatures
+            // Data that signers sign = the TxPoW ID (SHA3(SHA3(header_bytes)))
+            contract.setTxPoWID(txpowID);
 
             kissvm::Value result = contract.execute();
             if (!contract.isTrue()) {

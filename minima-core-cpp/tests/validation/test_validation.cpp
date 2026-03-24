@@ -523,3 +523,245 @@ TEST_SUITE("TxPoWValidator - Full Pipeline") {
         CHECK(r.valid);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TEST SUITE 6 — MULTISIG end-to-end through TxPoWValidator
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#include "../../src/crypto/RSA.hpp"
+
+TEST_SUITE("TxPoWValidator - MULTISIG end-to-end") {
+
+    // Build a full TxPoW with a MULTISIG script, sign its ID, validate
+    auto buildMultisigTx = [](
+        const std::string& script,
+        const std::vector<std::pair<MiniData, MiniData>>& sigs,
+        MockUTxO& utxo)
+        -> TxPoW
+    {
+        // Input coin locked by MULTISIG script
+        Coin inp = makeCoin(
+            "FFFF000000000000000000000000000000000000000000000000000000000001",
+            script, "10"
+        );
+        utxo.add(inp);
+
+        Coin out = makeOutputCoin("RETURN TRUE", "9");
+
+        Transaction txn;
+        txn.addInput(inp);
+        txn.addOutput(out);
+
+        Witness witness;
+        std::vector<uint8_t> sb(script.begin(), script.end());
+        MiniData ah = crypto::Hash::sha3_256(sb);
+        ScriptProof sp;
+        sp.script  = MiniString(script);
+        sp.address = ah;
+        witness.addScript(sp);
+
+        for (const auto& [pub, sig] : sigs) {
+            SignatureProof sigp;
+            sigp.pubKey    = pub;
+            sigp.signature = sig;
+            witness.addSignature(sigp);
+        }
+
+        TxPoW txpow;
+        txpow.body().txn     = txn;
+        txpow.body().witness = witness;
+        return txpow;
+    };
+
+    TEST_CASE("1-of-1 MULTISIG: valid sig → validates OK") {
+        auto kp  = crypto::RSA::generateKeyPair();
+
+        // We must sign the TxPoW ID — but the ID depends on the TxPoW content.
+        // Build TxPoW first with a placeholder sig, compute ID, re-sign.
+        // Use a known approach: assemble TxPoW, compute ID, sign ID, inject sig.
+
+        // Step 1: assemble without sig to get stable structure
+        std::string script = "RETURN MULTISIG(1," + kp.publicKey.toHexString() + ")";
+        Coin inp = makeCoin(
+            "FFFF000000000000000000000000000000000000000000000000000000000002",
+            script, "10"
+        );
+        Coin out = makeOutputCoin("RETURN TRUE", "9");
+
+        Transaction txn;
+        txn.addInput(inp);
+        txn.addOutput(out);
+
+        // Step 2: compute TxPoW ID without signatures (signatures don't affect header)
+        TxPoW txpow;
+        txpow.body().txn = txn;
+        MiniData txpowID = txpow.computeID();
+
+        // Step 3: sign the ID
+        MiniData sig = crypto::RSA::sign(kp.privateKey, txpowID);
+
+        // Step 4: add witness with signature
+        Witness witness;
+        std::vector<uint8_t> sb(script.begin(), script.end());
+        MiniData ah = crypto::Hash::sha3_256(sb);
+        ScriptProof sp; sp.script = MiniString(script); sp.address = ah;
+        witness.addScript(sp);
+        SignatureProof sigp; sigp.pubKey = kp.publicKey; sigp.signature = sig;
+        witness.addSignature(sigp);
+        txpow.body().witness = witness;
+
+        MockUTxO utxo;
+        utxo.add(inp);
+
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkScripts(txpow);
+        CHECK(r.valid);
+        if (!r.valid) MESSAGE(r.error);
+    }
+
+    TEST_CASE("1-of-1 MULTISIG: no sig → fails validation") {
+        auto kp = crypto::RSA::generateKeyPair();
+        std::string script = "RETURN MULTISIG(1," + kp.publicKey.toHexString() + ")";
+
+        Coin inp = makeCoin(
+            "FFFF000000000000000000000000000000000000000000000000000000000003",
+            script, "10"
+        );
+        Coin out = makeOutputCoin("RETURN TRUE", "9");
+
+        Transaction txn;
+        txn.addInput(inp);
+        txn.addOutput(out);
+
+        Witness witness;
+        std::vector<uint8_t> sb(script.begin(), script.end());
+        MiniData ah = crypto::Hash::sha3_256(sb);
+        ScriptProof sp; sp.script = MiniString(script); sp.address = ah;
+        witness.addScript(sp);
+        // NO signature in witness
+
+        TxPoW txpow;
+        txpow.body().txn     = txn;
+        txpow.body().witness = witness;
+
+        MockUTxO utxo;
+        utxo.add(inp);
+
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkScripts(txpow);
+        CHECK_FALSE(r.valid);
+    }
+
+    TEST_CASE("2-of-2 MULTISIG: both sign → validates OK") {
+        auto kp1 = crypto::RSA::generateKeyPair();
+        auto kp2 = crypto::RSA::generateKeyPair();
+        std::string script = "RETURN MULTISIG(2,"
+            + kp1.publicKey.toHexString() + ","
+            + kp2.publicKey.toHexString() + ")";
+
+        Coin inp = makeCoin(
+            "FFFF000000000000000000000000000000000000000000000000000000000004",
+            script, "10"
+        );
+        Coin out = makeOutputCoin("RETURN TRUE", "9");
+        Transaction txn;
+        txn.addInput(inp);
+        txn.addOutput(out);
+
+        TxPoW txpow;
+        txpow.body().txn = txn;
+        MiniData txpowID = txpow.computeID();
+
+        MiniData sig1 = crypto::RSA::sign(kp1.privateKey, txpowID);
+        MiniData sig2 = crypto::RSA::sign(kp2.privateKey, txpowID);
+
+        Witness witness;
+        std::vector<uint8_t> sb(script.begin(), script.end());
+        MiniData ah = crypto::Hash::sha3_256(sb);
+        ScriptProof sp; sp.script = MiniString(script); sp.address = ah;
+        witness.addScript(sp);
+        SignatureProof s1; s1.pubKey = kp1.publicKey; s1.signature = sig1; witness.addSignature(s1);
+        SignatureProof s2; s2.pubKey = kp2.publicKey; s2.signature = sig2; witness.addSignature(s2);
+        txpow.body().witness = witness;
+
+        MockUTxO utxo; utxo.add(inp);
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkScripts(txpow);
+        CHECK(r.valid);
+        if (!r.valid) MESSAGE(r.error);
+    }
+
+    TEST_CASE("2-of-2 MULTISIG: only one sig → fails validation") {
+        auto kp1 = crypto::RSA::generateKeyPair();
+        auto kp2 = crypto::RSA::generateKeyPair();
+        std::string script = "RETURN MULTISIG(2,"
+            + kp1.publicKey.toHexString() + ","
+            + kp2.publicKey.toHexString() + ")";
+
+        Coin inp = makeCoin(
+            "FFFF000000000000000000000000000000000000000000000000000000000005",
+            script, "10"
+        );
+        Coin out = makeOutputCoin("RETURN TRUE", "9");
+        Transaction txn;
+        txn.addInput(inp);
+        txn.addOutput(out);
+
+        TxPoW txpow;
+        txpow.body().txn = txn;
+        MiniData txpowID = txpow.computeID();
+
+        MiniData sig1 = crypto::RSA::sign(kp1.privateKey, txpowID);
+        // kp2 does NOT sign
+
+        Witness witness;
+        std::vector<uint8_t> sb(script.begin(), script.end());
+        MiniData ah = crypto::Hash::sha3_256(sb);
+        ScriptProof sp; sp.script = MiniString(script); sp.address = ah;
+        witness.addScript(sp);
+        SignatureProof s1; s1.pubKey = kp1.publicKey; s1.signature = sig1; witness.addSignature(s1);
+        txpow.body().witness = witness;
+
+        MockUTxO utxo; utxo.add(inp);
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkScripts(txpow);
+        CHECK_FALSE(r.valid);
+    }
+
+    TEST_CASE("MULTISIG: tampered signature → fails validation") {
+        auto kp = crypto::RSA::generateKeyPair();
+        std::string script = "RETURN MULTISIG(1," + kp.publicKey.toHexString() + ")";
+
+        Coin inp = makeCoin(
+            "FFFF000000000000000000000000000000000000000000000000000000000006",
+            script, "10"
+        );
+        Coin out = makeOutputCoin("RETURN TRUE", "9");
+        Transaction txn;
+        txn.addInput(inp);
+        txn.addOutput(out);
+
+        TxPoW txpow;
+        txpow.body().txn = txn;
+        MiniData txpowID = txpow.computeID();
+
+        MiniData sig = crypto::RSA::sign(kp.privateKey, txpowID);
+        auto badBytes = sig.bytes();
+        badBytes[0] ^= 0xFF;  // tamper
+        MiniData badSig(badBytes);
+
+        Witness witness;
+        std::vector<uint8_t> sb(script.begin(), script.end());
+        MiniData ah = crypto::Hash::sha3_256(sb);
+        ScriptProof sp; sp.script = MiniString(script); sp.address = ah;
+        witness.addScript(sp);
+        SignatureProof sigp; sigp.pubKey = kp.publicKey; sigp.signature = badSig;
+        witness.addSignature(sigp);
+        txpow.body().witness = witness;
+
+        MockUTxO utxo; utxo.add(inp);
+        TxPoWValidator v(utxo.lookup());
+        auto r = v.checkScripts(txpow);
+        CHECK_FALSE(r.valid);
+    }
+}
