@@ -1,124 +1,158 @@
-# Minima Developer Toolkit
+# minima-core-cpp
 
-> The missing developer toolchain for building on [Minima blockchain](https://docs.minima.global)
-
-A monorepo of TypeScript packages that bring modern developer experience to Minima smart contract and MiniDapp development.
+A C++20 implementation of the Minima blockchain core, targeting embedded and mobile devices (ARM, 300 MB RAM). The goal is wire-exact compatibility with the [Java reference implementation](https://github.com/minima-global/Minima) so that this node can participate in the live Minima network as a first-class peer.
 
 ---
 
-## Packages
+## What this is
 
-| Package | Description | Version |
-|---------|-------------|---------|
-| [`minima-test`](./minima-test) | Testing framework for KISS VM smart contracts | 0.1.0 |
-| [`kiss-vm-lint`](./kiss-vm-lint) | Static analyzer and linter for KISS VM scripts | 0.1.0 |
-| [`minima-contracts`](./minima-contracts) | Library of audited contract patterns | 0.1.0 |
-| [`create-minidapp`](./create-minidapp) | Scaffold CLI for new MiniDapp projects | 0.1.0 |
+Minima is a Layer 1 blockchain designed to run as a full node on every device — phones, IoT, bare-metal ARM boards. Every participant validates and produces blocks; there are no dedicated miners and no cloud servers. The protocol uses a UTxO model (similar to Bitcoin) and a deterministic scripting language called KISS VM for smart contracts.
+
+This repository contains:
+
+- **`src/`** — C++20 full-node implementation (types, objects, KISS VM interpreter, MMR accumulator, chain, network, mining, persistence)
+- **`tests/`** — [doctest](https://github.com/doctest/doctest) unit tests for every module (24 test suites)
+- **`monorepo/packages/`** — TypeScript developer tools: testing framework, linter, contract library, MiniDapp scaffold CLI
+- **`cmake/`** — cross-compilation toolchains for ARM64 and ARMv7
 
 ---
 
-## Quick Start
+## Building
 
-### Test your KISS VM contracts
+### Requirements
 
-```bash
-npm install -g minima-test
-minima-test run tests/
-```
+- CMake 3.16+
+- GCC 11+ or Clang 14+ with C++20 support
+- For ARM cross-compilation: `aarch64-linux-gnu-g++` or `arm-linux-gnueabihf-g++`
 
-### Lint your contracts
-
-```bash
-npm install -g kiss-vm-lint
-kiss-vm-lint contracts/my-contract.kiss
-```
-
-### Use audited contract patterns
-
-```js
-const { timeLock, multisig, exchange } = require('minima-contracts');
-
-const contract = timeLock({ lockBlock: 1000000, ownerKey: '0xabc...' });
-```
-
-### Scaffold a new MiniDapp
+### Linux / macOS
 
 ```bash
-npx create-minidapp my-dapp --template wallet
-cd my-dapp
-# Open index.html on your Minima node
+git clone https://github.com/jaroslawfejdasz/minima-core-cpp
+cd minima-core-cpp
+
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DMINIMA_BUILD_TESTS=ON \
+  -G "Unix Makefiles"
+
+make -C build -j$(nproc)
+ctest --test-dir build --output-on-failure
+```
+
+### ARM cross-compilation
+
+```bash
+# ARM64 (e.g. Raspberry Pi 4, Android)
+cmake -S . -B build-arm64 \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64.cmake \
+  -DCMAKE_BUILD_TYPE=Release
+
+# ARMv7 (e.g. older IoT boards)
+cmake -S . -B build-armv7 \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-armv7.cmake \
+  -DCMAKE_BUILD_TYPE=Release
+```
+
+---
+
+## Test status
+
+```
+24/24 test suites pass
+```
+
+| Module | Tests |
+|--------|-------|
+| Primitive types (MiniNumber, MiniData, MiniString) | test_mini_number, test_mini_data |
+| Cryptography (WOTS, TreeKey, BIP39, Hash) | test_wots, test_treekey, test_bip39 |
+| Protocol objects (Coin, TxPoW, Witness, Genesis) | test_txpow, test_integration |
+| KISS VM interpreter (42+ built-in functions) | test_kissvm |
+| MMR accumulator + MegaMMR | test_mmr, test_megammr |
+| Chain (TxPowTree, Cascade, DifficultyAdjust) | test_chain, test_cascade, test_difficulty |
+| Database (MinimaDB, Wallet) | test_database |
+| Persistence (SQLite BlockStore, UTxOStore) | test_persistence |
+| Validation (TxPoWValidator, WOTS signatures) | test_validation |
+| Network (NIOClient, NIOServer, P2PSync) | test_network |
+| Mining (TxPoWMiner, MiningManager) | test_mining |
+
+---
+
+## Architecture overview
+
+```
+┌───────────────────────────────────────────────┐
+│              P2P Network Layer                 │
+│         NIOServer ◄──► NIOClient               │
+│         NIOMessage (wire protocol)             │
+└──────────────────┬────────────────────────────┘
+                   │
+┌──────────────────▼────────────────────────────┐
+│            TxPoWProcessor                     │
+│     (async message queue + worker thread)     │
+└──────┬───────────────────────────┬────────────┘
+       │ accepted                  │ sync
+┌──────▼──────────┐   ┌────────────▼───────────┐
+│   TxPowTree     │   │  TxPoWGenerator        │
+│ (chain + reorg) │   │  TxPoWSearcher         │
+└──────┬──────────┘   └────────────────────────┘
+       │
+┌──────▼──────────────────────────────────────┐
+│                 MinimaDB                    │
+│  TxPowTree + BlockStore + MMRSet + Wallet   │
+│  Persistence: SQLite (bootstrap on restart) │
+└─────────────────────────────────────────────┘
+```
+
+For a detailed description of every layer see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+## Developer toolkit (TypeScript)
+
+The `monorepo/` directory contains four npm packages for working with KISS VM and MiniDapps. See [monorepo/README.md](monorepo/README.md) for full documentation.
+
+```
+monorepo/packages/
+├── minima-test/          # Jest-like test runner for KISS VM contracts
+├── kiss-vm-lint/         # Static analyser and linter
+├── minima-contracts/     # Library of 12 audited contract patterns
+└── create-minidapp/      # Scaffold CLI for new MiniDapp projects
 ```
 
 ---
 
 ## What is Minima?
 
-Minima is a Layer 1 blockchain where **every user runs a full node** — on mobile, IoT, or desktop. No dedicated miners. No cloud servers. True decentralization.
-
-- **UTxO model** (like Bitcoin, not Ethereum)
-- **KISS VM** — smart contract scripting language (1024 instruction limit, deterministic)
-- **MiniDapps** — decentralized apps installed directly on user nodes
-- **Maxima** — P2P messaging layer for off-chain communication
-
----
-
-## Architecture
-
-```
-minima-developer-toolkit/
-├── minima-test/          # Testing framework (Jest-like API)
-│   ├── src/
-│   │   ├── tokenizer/    # KISS VM tokenizer
-│   │   ├── interpreter/  # Full KISS VM interpreter
-│   │   ├── mock/         # Transaction mocking
-│   │   └── api/          # Test API (describe/it/expect)
-│   └── tests/            # 75 tests
-│
-├── kiss-vm-lint/         # Static analyzer
-│   ├── src/
-│   │   ├── rules/        # Lint rules
-│   │   └── cli.ts        # CLI
-│   └── tests/            # 40 tests
-│
-├── minima-contracts/     # Contract library
-│   ├── src/
-│   │   └── contracts/    # 12 contract patterns
-│   └── tests/            # 59 tests
-│
-└── create-minidapp/      # Scaffold CLI
-    ├── src/
-    │   ├── templates/    # wallet / token / exchange
-    │   └── cli.ts        # CLI
-    └── tests/            # 23 tests
-```
+- **Every device is a full node** — 300 MB RAM, runs on a smartphone or IoT board
+- **UTxO model** — similar to Bitcoin, not account-based
+- **KISS VM** — deterministic smart contract language, 1024 instruction limit
+- **MiniDapps** — ZIP web apps that run directly on your node, no cloud required
+- **Maxima** — off-chain P2P messaging layer
+- **TxPoW** — every transaction carries a small proof-of-work; no block-level mining race
 
 ---
 
-## Development
+## Implementation parity
 
-Each package is independent — install and build separately:
+The implementation aims for **bit-for-bit wire compatibility** with the Java reference. Where the Java code makes unusual choices (e.g. `MiniNumber` stored as a decimal string rather than a binary integer), this implementation does the same. Divergence from the reference is treated as a bug.
 
-```bash
-cd minima-test && npm install && npm run build && npm test
-cd kiss-vm-lint && npm install && npm run build && npm test
-cd minima-contracts && npm install && npm run build && npm test
-cd create-minidapp && npm install && npm run build && npm test
-```
+See [docs/PARITY_GAP_ANALYSIS.md](docs/PARITY_GAP_ANALYSIS.md) for the current parity status.
 
 ---
 
-## CI/CD
+## CI
 
-GitHub Actions runs tests on Node 18, 20, 22. Publishing to npm happens automatically on `v*` tags.
+GitHub Actions runs the full test suite on three targets:
 
-See [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
+| Job | Platform | Compiler |
+|-----|----------|----------|
+| build-linux-x64 | Ubuntu 22.04 | GCC 11 |
+| build-linux-arm64 | Ubuntu 22.04 | aarch64-linux-gnu-g++ |
+| build-linux-armv7 | Ubuntu 22.04 | arm-linux-gnueabihf-g++ |
 
 ---
 
 ## License
 
-MIT — see [LICENSE](./LICENSE)
-
----
-
-*Built with ❤️ for the Minima ecosystem*
+MIT — see [LICENSE](LICENSE)

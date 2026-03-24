@@ -1,75 +1,66 @@
 # Parity Gap Analysis — C++ vs Java Reference
 
-**Date:** 2026-03-23  
-**Current state:** 24/24 test suites pass.  
-**Goal:** Bit-for-bit, wire-exact 1:1 z Java referencją.
+**Last updated:** 2026-03-24
+**Test suites:** 24 / 24 pass
+**Goal:** Bit-for-bit, wire-exact compatibility with the [Java reference implementation](https://github.com/minima-global/Minima).
 
 ---
 
-## Status GAP-ów (2026-03-23)
+## Resolved gaps
 
-| GAP | Opis | Status |
-|-----|------|--------|
-| GAP 1 | Witness wire format + SignatureProof/ScriptProof/CoinProof | ✅ DONE |
-| GAP 2 | KISS VM brakujące 13 funkcji | ✅ DONE |
-| GAP 3 | TxPowTree + MinimaDB + Wallet | ✅ DONE |
-| GAP 4 | MessageProcessor + TxPoWProcessor + Generator + Searcher | ✅ DONE |
-| GAP 5 | Genesis block (GenesisCoin, GenesisMMR, GenesisTxPoW) | ✅ DONE |
+All previously identified gaps have been closed. The table below records what was done for reference.
+
+| Gap | Description | Status |
+|-----|-------------|--------|
+| 1 | Witness wire format — SignatureProof / ScriptProof / CoinProof | ✅ resolved |
+| 2 | KISS VM — 13 missing built-in functions | ✅ resolved |
+| 3 | TxPowTree + MinimaDB + Wallet | ✅ resolved |
+| 4 | MessageProcessor + TxPoWProcessor + Generator + Searcher | ✅ resolved |
+| 5 | Genesis block (GenesisCoin, GenesisMMR, GenesisTxPoW) | ✅ resolved |
 
 ---
 
-## Pełna mapa implementacji
+## Full parity map
 
-| Obszar | Stan | Uwagi |
-|--------|------|-------|
-| Wire format (DataStream) | ✅ 1:1 | DataOutputStream-compatible |
-| Primitive types (MiniNumber/MiniData/MiniString) | ✅ 1:1 | Byte-exact |
-| Protocol objects (Coin, TxPoW, TxHeader/Body, Witness) | ✅ 1:1 | Wire-compatible |
-| Signature / SignatureProof / ScriptProof / CoinProof | ✅ 1:1 | Java-exact structure |
-| KISS VM interpreter (42+ functions) | ✅ ~95% | Wszystkie kluczowe funkcje |
-| Cryptography (WOTS/TreeKey/BIP39) | ✅ 1:1 | Byte-exact z BouncyCastle |
-| MMR accumulator + MegaMMR | ✅ 1:1 | |
-| TxPowTree + chain reorganization | ✅ 1:1 | |
-| MinimaDB (central coordinator) | ✅ done | Wszystkie sub-systemy powiązane |
-| Wallet (WOTS key mgmt) | ✅ done | |
-| Processing pipeline (Processor/Generator/Searcher) | ✅ done | Sync + async |
+| Area | Status | Notes |
+|------|--------|-------|
+| Wire format (DataStream) | ✅ 1:1 | DataOutputStream-compatible byte order |
+| Primitive types (MiniNumber / MiniData / MiniString) | ✅ 1:1 | Byte-exact serialisation |
+| Protocol objects (Coin, TxPoW, TxHeader, TxBody, Witness) | ✅ 1:1 | Wire-compatible |
+| Signature / SignatureProof / ScriptProof / CoinProof | ✅ 1:1 | Matches Java structure exactly |
+| KISS VM interpreter (42+ functions) | ✅ ~95% | All functions used in production contracts |
+| Cryptography (WOTS / TreeKey / BIP39) | ✅ 1:1 | Byte-exact against BouncyCastle |
+| MMR accumulator + MegaMMR | ✅ 1:1 | Checkpoint, rollback, fast-sync IBD |
+| TxPowTree + chain reorganisation | ✅ 1:1 | |
+| MinimaDB (central coordinator) | ✅ complete | All sub-systems wired |
+| Wallet (WOTS key management) | ✅ complete | |
+| Processing pipeline (Processor / Generator / Searcher) | ✅ complete | Sync + async paths |
 | Genesis block | ✅ 1:1 | SHA3(MiniString.serialise()) address |
-| Persistence (SQLite, bootstrap replay) | ✅ done | |
-| P2P network (NIOClient/NIOServer/NIOMessage) | ✅ done | Wire-compatible |
-| P2P sync (P2PSync, Greeting exchange) | ✅ done | |
-| Mining (TxPoWMiner, MiningManager) | ✅ done | |
-| Cascade (chain pruning) | ✅ done | |
-| CI (GitHub Actions, 3 platforms) | ✅ done | x64 + arm64 + armv7 |
+| Persistence (SQLite, bootstrap replay) | ✅ complete | |
+| P2P network (NIOClient / NIOServer / NIOMessage) | ✅ complete | Wire-compatible |
+| P2P sync (P2PSync, Greeting exchange) | ✅ complete | |
+| Mining (TxPoWMiner, MiningManager) | ✅ complete | |
+| Cascade (chain pruning) | ✅ complete | |
+| CI (GitHub Actions, 3 platforms) | ✅ complete | x64 + arm64 + armv7 |
 
 ---
 
-## Pozostałe małe GAP-y (nie blokujące)
+## Remaining items (non-blocking)
 
-| # | Opis | Priorytet |
-|---|------|-----------|
-| 1 | `MegaMMR` — pełny fast-sync IBD (szkielet jest, brak pełnej logiki) | ✅ DONE |
-| 2 | `Cascade` integracja z `MinimaDB.addBlock()` — auto-trim starych bloków | ✅ DONE |
-| 3 | `P2P Greeting` — wysyłanie do seed node przy starcie | MEDIUM |
-| 4 | `PROOF` funkcja KISS VM — MMR proof weryfikacja w skrypcie | ✅ DONE |
-| 5 | npm publish — monorepo packages (minima-test, kiss-vm-lint) | MEDIUM |
-| 6 | Pełna walidacja WOTS podpisów w TxPoWValidator | ✅ DONE |
+| # | Description | Priority |
+|---|-------------|----------|
+| 1 | Live node integration test — connect to a real seed node and exchange Greeting | medium |
+| 2 | Publish npm packages (monorepo) | medium |
+| 3 | ARM QEMU smoke test in CI | low |
 
 ---
 
-## Priorytetowana lista (następne kroki)
+## Key implementation notes
 
-### 🔴 Krytyczne dla działającego węzła
+**MiniNumber** is stored as a decimal string internally, not a binary integer. The Java reference uses `BigDecimal`; matching its rounding semantics requires the same representation.
 
-1. **WOTS signature validation** w `TxPoWValidator` — aktualnie stub
-2. **PROOF** funkcja KISS VM — pozwala kontraktom weryfikować MMR proofs
-3. **P2P Greeting** — wysyłanie własnego Greeting przy połączeniu do seed node
+**TxPoW ID** is not a field in the header — it is computed as `SHA3(SHA3(serialised TxHeader))` and cached. The parent ID is `txpow.header().superParents[0]`.
 
-### 🟡 Ważne
+**Cryptography** — Minima does not use Schnorr / secp256k1. It uses **Winternitz OTS** (SHA3-256, W=8), which is post-quantum. The `Schnorr` stub in this codebase delegates to WOTS.
 
-4. **MegaMMR pełna logika** — fast sync dla nowych węzłów
-5. **Cascade integration** — automatyczne przycinanie
-
-### 🟢 Uzupełniające
-
-6. **npm publish** monorepo packages
-7. **Live node integration test** — połącz się z prawdziwym węzłem Minima i wymień Greeting
+**MegaMMR checkpoint depth** is 64 blocks. Checkpoints older than `currentBlock - 64` are pruned automatically in `MinimaDB.addBlock()`. The `pruneBelow()` call is intentionally deferred to `TxPoWProcessor.trimTree()` to match the Java sequencing.

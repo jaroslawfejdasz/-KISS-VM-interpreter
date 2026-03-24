@@ -1,41 +1,40 @@
-# minima-core-cpp Implementation Status
+# Implementation Status
 
-**Date:** 2026-03-23 (updated)  
-**Test suites:** 24/24 pass ✅  
-**Lines of C++:** ~8500
+**Last updated:** 2026-03-24
+**Test suites:** 24 / 24 pass ✅
+**Lines of C++:** ~8 500
 
 ---
 
 ## Summary
 
-Full node implementation of the Minima blockchain in C++20.
-Wire-exact compatibility with the Java reference implementation.
+Full-node implementation of the Minima blockchain in C++20. The goal is wire-exact compatibility with the [Java reference implementation](https://github.com/minima-global/Minima) so that this node can connect to and participate in the live Minima network.
 
 ---
 
-## Module Status
+## Module status
 
-| Module | Status | Tests |
-|--------|--------|-------|
-| `types/` — MiniNumber, MiniData, MiniString | ✅ | test_mini_number, test_mini_data |
-| `crypto/` — WOTS, TreeKey, BIP39, Hash | ✅ | test_wots, test_treekey, test_bip39 |
-| `serialization/` — DataStream | ✅ | (all) |
-| `objects/` — Coin, TxPoW, Witness, Greeting, Pulse, Genesis | ✅ | test_txpow, test_witness_wire, test_genesis |
-| `kissvm/` — interpreter, parser, 42+ builtins | ✅ | test_kissvm |
-| `mmr/` — MMRSet, MMRProof, MegaMMR (checkpoint/rollback/fast-sync) | ✅ | test_mmr, test_megammr |
-| `chain/` — TxPowTree, BlockStore, Cascade, DifficultyAdjust | ✅ | test_chain, test_cascade, test_difficulty |
-| `database/` — MinimaDB, Wallet | ✅ | test_database |
-| `persistence/` — SQLite BlockStore, UTxOStore | ✅ | test_persistence |
-| `validation/` — TxPoWValidator | ✅ | test_validation |
-| `network/` — NIOClient, NIOServer, NIOMessage, P2PSync | ✅ | test_network, test_p2p_sync |
-| `mining/` — TxPoWMiner, MiningManager | ✅ | test_mining |
-| `system/` — MessageProcessor, TxPoWProcessor, TxPoWGenerator, TxPoWSearcher | ✅ | test_processor |
-| `mempool/` — Mempool | ✅ | (integration) |
-| **Integration** | ✅ | test_integration (12 tests) |
+| Module | Status | Test file(s) |
+|--------|--------|--------------|
+| `types/` — MiniNumber, MiniData, MiniString | ✅ complete | test_mini_number, test_mini_data |
+| `crypto/` — WOTS, TreeKey, BIP39, Hash | ✅ complete | test_wots, test_treekey, test_bip39 |
+| `serialization/` — DataStream | ✅ complete | (all modules) |
+| `objects/` — Coin, TxPoW, Witness, Greeting, Pulse, Genesis | ✅ complete | test_txpow, test_integration |
+| `kissvm/` — interpreter, parser, 42+ built-in functions | ✅ complete | test_kissvm |
+| `mmr/` — MMRSet, MMRProof, MegaMMR (checkpoint / rollback / fast-sync) | ✅ complete | test_mmr, test_megammr |
+| `chain/` — TxPowTree, BlockStore, Cascade, DifficultyAdjust | ✅ complete | test_chain, test_cascade, test_difficulty |
+| `database/` — MinimaDB, Wallet | ✅ complete | test_database |
+| `persistence/` — SQLite BlockStore, UTxOStore | ✅ complete | test_persistence |
+| `validation/` — TxPoWValidator (incl. WOTS signature verification) | ✅ complete | test_validation |
+| `network/` — NIOClient, NIOServer, NIOMessage, P2PSync | ✅ complete | test_network |
+| `mining/` — TxPoWMiner, MiningManager | ✅ complete | test_mining |
+| `system/` — MessageProcessor, TxPoWProcessor, TxPoWGenerator, TxPoWSearcher | ✅ complete | test_processor |
+| `mempool/` — Mempool | ✅ complete | (integration) |
+| **Integration** | ✅ complete | test_integration |
 
 ---
 
-## CI Matrix
+## CI matrix
 
 | Job | Platform | Compiler | Status |
 |-----|----------|----------|--------|
@@ -49,20 +48,20 @@ Wire-exact compatibility with the Java reference implementation.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                       P2P Network                         │
-│            NIOServer ◄──► NIOClient                       │
-│            NIOMessage (wire protocol)                     │
+│                       P2P Network                        │
+│             NIOServer ◄──► NIOClient                     │
+│             NIOMessage (wire protocol)                   │
 └──────────────────────┬───────────────────────────────────┘
                        │ packets
 ┌──────────────────────▼───────────────────────────────────┐
-│                  TxPoWProcessor                           │
-│           (async message queue + worker thread)           │
+│                  TxPoWProcessor                          │
+│          (async message queue + worker thread)           │
 └──────┬────────────────────────────────────────┬──────────┘
        │ ACCEPTED                               │ SYNC
 ┌──────▼────────┐    ┌────────────────┐   ┌────▼──────────┐
 │  TxPowTree    │    │ TxPoWGenerator │   │ TxPoWSearcher │
-│  (chain + re- │    │ (block template│   │ (chain query) │
-│   org)        │    │  from mempool) │   └───────────────┘
+│  (chain +     │    │ (block template│   │ (chain query) │
+│   reorg)      │    │  from mempool) │   └───────────────┘
 └──────┬────────┘    └────────┬───────┘
        │                      │
 ┌──────▼──────────────────────▼─────────────────────────────┐
@@ -74,13 +73,10 @@ Wire-exact compatibility with the Java reference implementation.
 
 ---
 
-## TODO (next priorities)
+## Next priorities
 
 | # | Task | Priority |
 |---|------|----------|
-| 1 | WOTS signature validation in TxPoWValidator | HIGH |
-| 2 | PROOF function in KISS VM (MMR proof verify) | HIGH |
-| 3 | P2P Greeting send to seed node on startup | MEDIUM |
-| 4 | MegaMMR full logic (fast-sync IBD) | MEDIUM |
-| 5 | Cascade integration in MinimaDB.addBlock() | LOW |
-| 6 | npm publish monorepo packages | MEDIUM |
+| 1 | Publish npm packages (minima-test, kiss-vm-lint) | medium |
+| 2 | Live node integration test — connect to a real Minima seed node and exchange Greeting | medium |
+| 3 | ARM QEMU testing in CI — execute cross-compiled binaries | low |

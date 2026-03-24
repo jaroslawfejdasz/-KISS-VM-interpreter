@@ -1,12 +1,13 @@
-# AGENT RULES — minima-core-cpp
+# Development Rules — minima-core-cpp
 
 ## Mission
-Rewrite Minima blockchain core 1:1 in C++20 for bare-metal ARM chips.
+
+Re-implement the Minima blockchain core 1:1 in C++20, targeting bare-metal ARM chips.
 Reference: https://github.com/minima-global/Minima (Java)
 
 ---
 
-## Session Start — do this FIRST, every session
+## Session start — do this first, every session
 
 ```bash
 cd /app
@@ -30,7 +31,7 @@ Then read `IMPLEMENTATION_STATUS.md` and pick the next TODO item.
 
 ---
 
-## After EVERY compile+test pass → IMMEDIATELY push
+## After every compile + test pass → push immediately
 
 ```bash
 cd /app
@@ -39,7 +40,7 @@ git commit -m "feat: <what was done>"
 git push github main
 ```
 
-**This is not optional.** If the session dies before push — work is lost.
+Do not skip this step. If the session ends before a push, the work is lost.
 
 ---
 
@@ -53,22 +54,21 @@ cmake /app -DCMAKE_BUILD_TYPE=Debug -DMINIMA_BUILD_TESTS=ON \
 make -C /tmp/build -j$(nproc) && ctest --test-dir /tmp/build --output-on-failure
 ```
 
-`-G "Unix Makefiles"` is required — without it cmake picks Ninja and the
-`make` command fails.
+`-G "Unix Makefiles"` is required — without it CMake picks Ninja and `make` fails.
 
 ---
 
-## Coding Rules
+## Coding rules
 
-- Every new file → immediately add to `CMakeLists.txt` sources list
-- Every new class → write matching test in `tests/<module>/test_<module>.cpp`
-- Check Java reference before writing wire formats
-- No half-finished pushes — compile+test FIRST, then push
-- Small iterations: max 3-4 files per commit
+- Every new file must be added to `CMakeLists.txt` sources immediately.
+- Every new class must have a matching test in `tests/<module>/test_<module>.cpp`.
+- Always check the Java reference before writing wire format code.
+- Never push code that does not compile and pass tests.
+- Keep commits small: max 3–4 files per commit.
 
 ---
 
-## API Conventions
+## API conventions
 
 ```cpp
 // MiniData
@@ -85,12 +85,15 @@ const std::string& str = ms.str();              // .str(), NOT .toString()
 
 // Hash
 MiniData h3 = Hash::sha3_256(data);            // returns MiniData
-// then: h3.bytes() to get std::vector<uint8_t>
 
 // Coin getters
 c.coinID()           // MiniData
 c.amount()           // MiniNumber
 c.address().hash()   // MiniData
+
+// TxPoW identity
+txpow.computeID()              // SHA3(SHA3(header)) — NOT a field in the header
+txpow.header().superParents[0] // direct parent ID
 
 // TxBlock
 block.txpow()        // NOT .getTxPoW()
@@ -104,7 +107,7 @@ minima::crypto::    // Hash, Winternitz, TreeKey
 
 ---
 
-## Test Template
+## Test template
 
 ```cpp
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
@@ -121,14 +124,14 @@ TEST_CASE("<Class> basic") {
 
 ---
 
-## Repository Layout
+## Repository layout
 
 ```
-/app/                   ← git root, also cmake root
+/app/                   ← git root and cmake root
 ├── src/                ← all C++ source
 ├── tests/              ← one test file per module
-├── monorepo/           ← TypeScript packages (separate from C++)
-├── cmake/              ← ARM cross-compile toolchains
+├── monorepo/           ← TypeScript packages (separate project)
+├── cmake/              ← ARM cross-compilation toolchains
 ├── .github/workflows/  ← CI
 ├── CMakeLists.txt
 ├── IMPLEMENTATION_STATUS.md
@@ -138,10 +141,8 @@ TEST_CASE("<Class> basic") {
 
 ---
 
-## Current Priorities (as of 2026-03-22)
+## Current priorities
 
-1. **npm publish** — publish monorepo packages to npm registry
-2. **Persistence integration** — wire BlockStore + UTxOStore into ChainProcessor
-3. **Network I/O integration** — complete NIOServer peer handshake
-4. **P2P sync loop** — IBD request/response, flood-fill propagation
-5. **ARM QEMU testing** — execute cross-compiled binaries in CI
+1. **npm publish** — publish monorepo packages to the npm registry
+2. **Live node test** — connect to a real Minima seed node and exchange a Greeting message
+3. **ARM QEMU testing in CI** — execute cross-compiled binaries in GitHub Actions

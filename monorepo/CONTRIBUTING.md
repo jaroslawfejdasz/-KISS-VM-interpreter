@@ -1,69 +1,85 @@
 # Contributing to Minima Developer Toolkit
 
-Thank you for your interest in contributing! This document explains how to get started.
+Contributions are welcome. This document explains how to get the project running locally and how to submit changes.
+
+---
 
 ## Setup
 
 ```bash
 git clone https://github.com/jaroslawfejdasz/minima-core-cpp
-cd minima-developer-toolkit
+cd minima-core-cpp/monorepo
 npm install
 npm run build
 npm test
 ```
 
-All 198 tests should pass.
+All 198 tests should pass before you start making changes.
 
-## Repository Structure
+---
+
+## Repository structure
 
 ```
 packages/
 ├── minima-test/        # KISS VM testing framework
-├── kiss-vm-lint/       # Static analyzer
+├── kiss-vm-lint/       # Static analyser
 ├── minima-contracts/   # Contract library
 └── create-minidapp/    # Scaffold CLI
 ```
 
-## Development Workflow
+---
 
-1. Make changes in the relevant `packages/<name>/src/` directory
-2. Build: `cd packages/<name> && npm run build`
-3. Test: `cd packages/<name> && npm test`
-4. Run all tests: `npm test` (from root)
+## Development workflow
 
-## Adding a new KISS VM function
+1. Make changes in the relevant `packages/<name>/src/` directory.
+2. Build the changed package: `cd packages/<name> && npm run build`
+3. Test the changed package: `cd packages/<name> && npm test`
+4. Run the full suite from the monorepo root: `npm test`
 
-The KISS VM interpreter is in `packages/minima-test/src/interpreter/functions.ts`.
+---
 
-1. Add the function to the `FUNCTIONS` map
-2. Add it to the `KEYWORDS` set in `tokenizer/index.ts`
-3. Add arity info in `kiss-vm-lint/src/rules.ts`
-4. Write tests in `packages/minima-test/tests/`
+## Adding a new KISS VM built-in function
+
+The KISS VM interpreter lives in `packages/minima-test/src/interpreter/functions.ts`.
+
+1. Add the function to the `FUNCTIONS` map.
+2. Add it to the `KEYWORDS` set in `tokenizer/index.ts`.
+3. Add arity information in `kiss-vm-lint/src/rules.ts`.
+4. Write tests in `packages/minima-test/tests/`.
+
+---
 
 ## Adding a new contract pattern
 
-1. Add to `packages/minima-contracts/src/contracts/` as a `.ts` file
-2. Register in `packages/minima-contracts/src/index.ts`
-3. Write tests in `packages/minima-contracts/tests/run.js`
+1. Create a new `.ts` file in `packages/minima-contracts/src/contracts/`.
+2. Register it in `packages/minima-contracts/src/index.ts`.
+3. Write tests in `packages/minima-contracts/tests/run.js`.
 
-## Commit Convention
+---
+
+## Commit convention
 
 ```
 feat(minima-test): add CHECKSIG mock with real secp256k1
 fix(kiss-vm-lint): handle nested ELSEIF chains correctly
-docs: update README quick start examples
+docs: update README quick-start examples
 release: v0.2.0
 ```
 
 Use `release: vX.Y.Z` to trigger automatic npm publish via CI.
 
-## Code Style
+---
 
-- TypeScript for all source files
-- No external runtime dependencies (KISS VM interpreter must be self-contained)
-- Every new feature must have tests
-- Error messages must be human-readable
+## Code style
 
-## Questions?
+- TypeScript for all source files.
+- No external runtime dependencies — the KISS VM interpreter must be self-contained.
+- Every new feature must include tests.
+- Error messages must be clear and actionable.
+
+---
+
+## Questions
 
 Open an issue or reach out on the [Minima Discord](https://discord.gg/minima).
