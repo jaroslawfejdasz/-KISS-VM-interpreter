@@ -38,8 +38,94 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+      - name: Test (unit)
+        run: ctest --test-dir build --output-on-failure -E "test_live_node|test_network|test_p2p"
+
+  # ── Live node integration test (Ubuntu 22.04) ─────────────────────────
+  live-node-test:
+    name: Live Node Integration Test
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake build-essential ninja-build openjdk-17-jre-headless
+
+      - name: Download Minima JAR (latest release)
+        run: |
+          curl -sL \
+            "https://github.com/minima-global/Minima/releases/download/v1.0.45/minima.jar" \
+            -o minima.jar
+          ls -lh minima.jar
+
+      - name: Configure & Build (test_live_node only)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMINIMA_BUILD_TESTS=ON \
+            -DMINIMA_CRYPTO_OPENSSL=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -G Ninja
+          cmake --build build --target test_live_node --parallel
+
+      - name: Start Minima node (genesis + testnet)
+        run: |
+          mkdir -p /tmp/minima-data
+          java -Xmx256m -jar minima.jar \
+            -data /tmp/minima-data \
+            -port 9001 \
+            -rpcenable \
+            -test \
+            -genesis \
+            -noshutdownhook \
+            > /tmp/minima.log 2>&1 &
+          echo $! > /tmp/minima.pid
+          echo "Started PID: $(cat /tmp/minima.pid)"
+
+          # Wait for genesis block (up to 60s)
+          echo "Waiting for genesis block..."
+          for i in $(seq 1 60); do
+            sleep 1
+            if grep -q "Genesis block created" /tmp/minima.log 2>/dev/null; then
+              echo "Genesis created at t=${i}s"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "ERROR: genesis block not created in 60s"
+              cat /tmp/minima.log
+              exit 1
+            fi
+          done
+
+          # Extra wait for P2P/NIO listener to be ready
+          sleep 5
+
+          # Verify RPC responds
+          STATUS=$(curl -sf --max-time 5 "http://127.0.0.1:9005/status")
+          if [ -z "$STATUS" ]; then
+            echo "ERROR: RPC port 9005 not responding"
+            cat /tmp/minima.log
+            exit 1
+          fi
+          BLOCK=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin)['response']['chain']['block'])")
+          echo "Node ready. Chain block: $BLOCK"
+
+      - name: Run live integration tests
+        run: |
+          ./build/tests/test_live_node
+
+      - name: Print Minima node log (on failure)
+        if: failure()
+        run: cat /tmp/minima.log
+
+      - name: Stop Minima node
+        if: always()
+        run: |
+          PID=$(cat /tmp/minima.pid 2>/dev/null)
+          [ -n "$PID" ] && kill "$PID" 2>/dev/null && echo "Stopped PID $PID" || echo "Already stopped"
 
   # ── Clang build ────────────────────────────────────────────────────────
   clang-build:
@@ -68,7 +154,7 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure -E "test_live_node|test_network|test_p2p"
 
   # ── ARM64 cross-compile (no tests — QEMU not set up) ──────────────────
   cross-aarch64:
@@ -152,7 +238,7 @@ jobs:
   npm-publish:
     name: Publish npm packages
     runs-on: ubuntu-22.04
-    needs: [build-and-test]   # czeka aż testy przejdą
+    needs: [build-and-test, live-node-test]
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
@@ -211,7 +297,7 @@ jobs:
   github-release:
     name: Create GitHub Release
     runs-on: ubuntu-22.04
-    needs: [build-and-test, cross-aarch64, cross-armv7]
+    needs: [build-and-test, live-node-test, cross-aarch64, cross-armv7]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write

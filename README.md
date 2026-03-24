@@ -143,13 +143,17 @@ See [docs/PARITY_GAP_ANALYSIS.md](docs/PARITY_GAP_ANALYSIS.md) for the current p
 
 ## CI
 
-GitHub Actions runs the full test suite on three targets:
+GitHub Actions runs the full test suite on every push and PR:
 
-| Job | Platform | Compiler |
-|-----|----------|----------|
-| build-linux-x64 | Ubuntu 22.04 | GCC 11 |
-| build-linux-arm64 | Ubuntu 22.04 | aarch64-linux-gnu-g++ |
-| build-linux-armv7 | Ubuntu 22.04 | arm-linux-gnueabihf-g++ |
+| Job | What it does |
+|-----|-------------|
+| **Build & Test** (Ubuntu 22.04 + 24.04, GCC) | Compile + all unit tests |
+| **Live Node Integration** (Ubuntu 22.04) | Downloads `minima.jar`, starts a private genesis node, runs `test_live_node` (11 tests, 100 assertions) against a real Java node |
+| **Clang build** (Ubuntu 22.04, clang-15) | Cross-compiler validation |
+| **Cross-compile ARM64** | aarch64 binary (no tests — no QEMU) |
+| **Cross-compile ARMv7** | armv7 binary (no tests — no QEMU) |
+
+The live node job verifies **wire-format compatibility with the Java reference implementation** on every commit.
 
 ---
 

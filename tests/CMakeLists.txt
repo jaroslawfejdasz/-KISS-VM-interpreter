@@ -39,5 +39,20 @@ add_minima_test(test_processor system/test_processor.cpp)
 
 add_minima_test(test_integration  integration/test_integration.cpp)
 
-# Live node integration test — requires Minima Java node on 127.0.0.1:19001
-add_minima_test(test_live_node    network/test_live_node.cpp)
+# ── Live node integration test ────────────────────────────────────────────
+# Requires a real Minima Java node on 127.0.0.1:9001 (RPC on 9005).
+# Binary is always built, but test is DISABLED in ctest by default.
+# Enable explicitly:
+#   ctest --test-dir build -R test_live_node          # run just this test
+# Or via CI workflow which starts the node automatically before running.
+add_executable(test_live_node network/test_live_node.cpp)
+target_link_libraries(test_live_node PRIVATE minima-core)
+target_include_directories(test_live_node PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor
+)
+add_test(NAME test_live_node COMMAND test_live_node)
+set_tests_properties(test_live_node PROPERTIES
+    DISABLED TRUE
+    LABELS "integration;live"
+)
