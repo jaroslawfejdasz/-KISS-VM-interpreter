@@ -19,3 +19,5 @@ Thumbs.db
 # env files
 .env
 .env.local
+.agents/
+.agents/.env
