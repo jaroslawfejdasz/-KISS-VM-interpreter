@@ -5,7 +5,7 @@ Thank you for your interest in contributing! This document explains how to get s
 ## Setup
 
 ```bash
-git clone https://github.com/jaroslawfejdasz/-KISS-VM-interpreter
+git clone https://github.com/jaroslawfejdasz/minima-core-cpp
 cd minima-developer-toolkit
 npm install
 npm run build

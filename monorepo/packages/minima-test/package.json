@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter.git",
+    "url": "https://github.com/jaroslawfejdasz/minima-core-cpp.git",
     "directory": "monorepo/packages/minima-test"
   },
   "main": "dist/index.js",

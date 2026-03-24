@@ -12,7 +12,7 @@ Reference: https://github.com/minima-global/Minima (Java)
 cd /app
 git config user.email "jaroslawfejdasz@gmail.com"
 git config user.name "Jaroslaw Fejdasz"
-git remote set-url github "https://$GITHUB_ACCESS_TOKEN@github.com/jaroslawfejdasz/-KISS-VM-interpreter.git"
+git remote set-url github "https://$GITHUB_ACCESS_TOKEN@github.com/jaroslawfejdasz/minima-core-cpp.git"
 git fetch github && git reset --hard github/main
 
 # Verify baseline build

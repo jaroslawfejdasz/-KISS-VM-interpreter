@@ -29,13 +29,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter",
+    "url": "https://github.com/jaroslawfejdasz/minima-core-cpp",
     "directory": "packages/"
   },
   "bugs": {
-    "url": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter/issues"
+    "url": "https://github.com/jaroslawfejdasz/minima-core-cpp/issues"
   },
-  "homepage": "https://github.com/jaroslawfejdasz/-KISS-VM-interpreter#readme",
+  "homepage": "https://github.com/jaroslawfejdasz/minima-core-cpp#readme",
   "types": "dist/index.d.ts",
   "author": "Jaroslaw Fejdasz"
 }

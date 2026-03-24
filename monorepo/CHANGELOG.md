@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added test: `[runtime] same-nonce replay blocked` to cover this exact case.
 
 ### Fixed
-- Repository URLs in all `package.json` files pointed to placeholder `minima-global/developer-toolkit` — updated to actual repo `jaroslawfejdasz/-KISS-VM-interpreter`
+- Repository URLs in all `package.json` files pointed to placeholder `minima-global/developer-toolkit` — updated to actual repo `jaroslawfejdasz/minima-core-cpp`
 - Test count badge updated to 198
 
 ## [0.1.1] - 2026-03-14
