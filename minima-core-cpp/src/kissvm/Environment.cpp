@@ -39,4 +39,8 @@ void Environment::setTotOut(const MiniNumber& total) {
     set("@TOTOUT", Value::number(total));
 }
 
+void Environment::setTxPoWID(const MiniData& txpowid) {
+    set("@TXPOWID", Value::hex(txpowid));
+}
+
 } // namespace minima::kissvm

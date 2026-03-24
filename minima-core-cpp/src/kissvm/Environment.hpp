@@ -33,6 +33,7 @@ public:
     void setScript  (const std::string& script);
     void setTotIn   (const MiniNumber& total);
     void setTotOut  (const MiniNumber& total);
+    void setTxPoWID (const MiniData& txpowid);
 
 private:
     std::unordered_map<std::string, Value> m_vars;

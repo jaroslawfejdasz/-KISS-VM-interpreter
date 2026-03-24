@@ -20,6 +20,7 @@
 #include "../objects/Transaction.hpp"
 #include "../objects/Witness.hpp"
 #include "../objects/Coin.hpp"
+#include "../types/MiniData.hpp"
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -62,6 +63,8 @@ public:
     // State variable injection (called by validator before execute())
     void setBlockNumber(const MiniNumber& bn) { m_env.setBlock(bn); }
     void setCoinAge    (const MiniNumber& age){ m_env.setCoinage(age); }
+    void setTxPoWID    (const MiniData& id)       { m_txpowId = id; m_env.setTxPoWID(id); }
+    const MiniData& txpowID() const               { return m_txpowId; }
 
     void tick();  // instruction counter — called by Interpreter
 
@@ -71,6 +74,7 @@ private:
     const Transaction& m_txn;
     const Witness&     m_witness;
     size_t          m_inputIdx;
+    MiniData        m_txpowId;
     int             m_instrCount{0};
     bool            m_result{false};
     std::string     m_trace;
